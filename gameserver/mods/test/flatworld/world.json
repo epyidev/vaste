@@ -1,9 +1,11 @@
 {
-  "type": "flatworld",
-  "spawn": {
+  "generatorType": "flatworld",
+  "generatorOptions": {},
+  "spawnPoint": {
     "x": 0,
-    "y": 47,
+    "y": 46,
     "z": 0
   },
-  "height": 256
+  "created": 1759657717692,
+  "lastAccessed": 1759657837724
 }

@@ -36,14 +36,10 @@ class EntityManager {
             throw new Error('Invalid entity or world');
         }
 
-        // Remove from previous world if exists
-        if (entity.world) {
-            entity.world.entities.delete(entity);
-        }
-
-        // Add to new world
+        // Store world reference on entity
         entity.world = world;
-        world.entities.add(entity);
+        
+        console.log(`[EntityManager] Entity ${entity.id} assigned to world ${world.worldPath || 'unknown'}`);
     }
 
     setEntityCoords(entity, position) {
@@ -70,10 +66,8 @@ class EntityManager {
     destroyEntity(entityId) {
         const entity = this.entities.get(entityId);
         if (entity) {
-            // Remove from world if exists
-            if (entity.world) {
-                entity.world.entities.delete(entity);
-            }
+            // Clear world reference
+            entity.world = null;
 
             // Remove from player entities if it's a player
             if (entity instanceof VastePlayerEntity) {
@@ -87,7 +81,13 @@ class EntityManager {
     }
 
     getEntitiesInWorld(world) {
-        return Array.from(world.entities);
+        const entitiesInWorld = [];
+        for (const entity of this.entities.values()) {
+            if (entity.world === world) {
+                entitiesInWorld.push(entity);
+            }
+        }
+        return entitiesInWorld;
     }
 }
 

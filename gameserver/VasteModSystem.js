@@ -13,6 +13,7 @@ const { WorldManager } = require('./vaste-api/world');
 const { EntityManager } = require('./vaste-api/entity');
 const { EventManager } = require('./vaste-api/events');
 const { MathUtils } = require('./vaste-api/math');
+const { registry: generatorRegistry } = require('./world');
 
 class VasteModSystem {
     constructor(gameServer) {
@@ -410,16 +411,37 @@ class VasteModSystem {
     getWorldState() {
         const activeWorld = this.worldManager.getActiveWorld();
         if (activeWorld) {
-            const blocks = typeof activeWorld.getBlocksArray === 'function' ? activeWorld.getBlocksArray() : [];
-            const spawnPoint = activeWorld.spawn || activeWorld.spawnPoint || { x: 0, y: 4, z: 0 };
-            const worldSize = (activeWorld.width && activeWorld.height) ? Math.max(activeWorld.width, activeWorld.height) : null;
-            return { blocks, worldSize, spawnPoint };
+            // Return spawn point and world info for new world system
+            const spawnPoint = activeWorld.spawnPoint || { x: 0, y: 64, z: 0 };
+            return { 
+                world: activeWorld,
+                spawnPoint,
+                generatorType: activeWorld.generatorType,
+                worldPath: activeWorld.worldPath
+            };
         }
         return null;
     }
 
     getLoadedMods() {
         return Array.from(this.mods.values()).map(mod => ({ name: mod.name, description: mod.description, version: mod.version, author: mod.author }));
+    }
+
+    /**
+     * Register a custom world generator (for use by mods)
+     * @param {string} name - Generator name
+     * @param {Function} generatorClass - Generator class
+     */
+    registerGenerator(name, generatorClass) {
+        generatorRegistry.register(name, generatorClass);
+    }
+
+    /**
+     * Get the generator registry
+     * @returns {Object}
+     */
+    getGeneratorRegistry() {
+        return generatorRegistry;
     }
 }
 
