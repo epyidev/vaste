@@ -1,6 +1,5 @@
 /**
  * Calculate ambient occlusion value for a vertex
- * Based on Minecraft-style vertex AO
  * @returns AO value between 0.0 (full shadow) and 1.0 (no shadow)
  */
 export function calculateVertexAO(
@@ -14,7 +13,7 @@ export function calculateVertexAO(
 
   const occludedSides = (side1 ? 1 : 0) + (side2 ? 1 : 0) + (corner ? 1 : 0);
 
-  // Map to brightness levels (Minecraft style)
+  // Map to brightness levels
   switch (occludedSides) {
     case 0:
       return 1.0; // No occlusion

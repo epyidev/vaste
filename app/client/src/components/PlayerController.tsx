@@ -9,7 +9,7 @@ interface PlayerControllerProps {
   networkManager: NetworkManager | null;
 }
 
-const MOVE_SPEED = 4.317; // Minecraft walking speed
+const MOVE_SPEED = 4.317; // Walking speed
 const SPRINT_MULTIPLIER = 1.3;
 const JUMP_FORCE = 8;
 const GRAVITY = 25;
