@@ -412,6 +412,11 @@ class GameServer {
     // Get player entity (mods may have modified it)
     const playerEntity = this.modSystem.entityManager.getPlayerEntity(user.id);
     
+    log(`Player entity after mod join: ${playerEntity ? 'found' : 'not found'}`, "DEBUG");
+    if (playerEntity) {
+      log(`Player entity world: ${playerEntity.world ? 'assigned' : 'not assigned'}`, "DEBUG");
+    }
+    
     if (playerEntity && playerEntity.world) {
       // Mod assigned player to a world
       player.world = playerEntity.world;
@@ -420,7 +425,19 @@ class GameServer {
         player.y = playerEntity.position.y;
         player.z = playerEntity.position.z;
       }
+      log(`Player ${user.username} assigned to world at (${player.x}, ${player.y}, ${player.z})`, "INFO");
+    } else {
+      log(`WARNING: Player ${user.username} has no world assigned by mods!`, "WARN");
     }
+
+    // Send block mapping table to client (MUST be sent before world data!)
+    const { blockMapping } = require('./BlockRegistry');
+    const mappingTable = blockMapping.exportMappingTable();
+    ws.send(JSON.stringify({
+      type: "block_mapping",
+      mappings: mappingTable
+    }));
+    log(`Sent block mapping table to ${user.username}: ${mappingTable.length} blocks`);
 
     // Send world assignment message
     const worldAssignMsg = ChunkProtocol.createWorldAssignMessage({
@@ -616,11 +633,20 @@ class GameServer {
 
   handleChunkRequest(playerId, message) {
     const player = this.players.get(playerId);
-    if (!player || !player.world) return;
+    if (!player) {
+      log(`Chunk request from unknown player ${playerId}`, "WARN");
+      return;
+    }
+    
+    if (!player.world) {
+      log(`Chunk request from ${player.username} but no world assigned!`, "WARN");
+      return;
+    }
 
     const { cx, cy, cz } = message;
 
     try {
+      log(`Chunk request from ${player.username}: (${cx}, ${cy}, ${cz})`, "DEBUG");
       const chunk = player.world.getOrGenerateChunk(cx, cy, cz);
       
       if (!chunk.isEmpty()) {
@@ -629,9 +655,13 @@ class GameServer {
         
         const chunkKey = `${cx},${cy},${cz}`;
         player.loadedChunks.add(chunkKey);
+        log(`Sent chunk (${cx}, ${cy}, ${cz}) to ${player.username}`, "DEBUG");
+      } else {
+        log(`Chunk (${cx}, ${cy}, ${cz}) is empty, not sending`, "DEBUG");
       }
     } catch (error) {
       log(`Error handling chunk request from ${player.username}: ${error.message}`, "ERROR");
+      console.error(error);
     }
   }
 

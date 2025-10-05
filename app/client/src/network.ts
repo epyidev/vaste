@@ -74,6 +74,10 @@ export class NetworkManager {
     this.authenticatedUser = user || null;
   }
 
+  setAuthenticatedUser(user: any) {
+    this.authenticatedUser = user;
+  }
+
   /**
    * Initialize chunk decoder worker
    */
@@ -215,6 +219,7 @@ export class NetworkManager {
                 ? await event.data.arrayBuffer() 
                 : event.data;
               
+              logger.debug(`[Network] Received binary message: ${buffer.byteLength} bytes`);
               await this.handleBinaryMessage(buffer);
               return;
             }
@@ -252,8 +257,11 @@ export class NetworkManager {
       const view = new DataView(buffer);
       const messageType = view.getUint8(0);
 
+      logger.debug(`[Network] Binary message type: ${messageType}`);
+
       if (messageType === 2) {
         // CHUNK_DATA
+        logger.debug(`[Network] Decoding chunk data...`);
         const chunkData = await this.decodeChunk(buffer);
         this.handleChunkData(chunkData);
       } else if (messageType === 3) {
@@ -265,6 +273,7 @@ export class NetworkManager {
       }
     } catch (error) {
       logger.error("[Network] Error handling binary message:", error);
+      console.error(error);
     }
   }
 
@@ -277,7 +286,7 @@ export class NetworkManager {
     // Store chunk
     this.gameState.chunks.set(chunkKey, chunkData);
     
-    logger.debug(`[Network] Received chunk (${chunkData.cx}, ${chunkData.cy}, ${chunkData.cz}) with ${chunkData.blocks.length} blocks`);
+    logger.info(`[Network] Stored chunk (${chunkData.cx}, ${chunkData.cy}, ${chunkData.cz}) - Total chunks: ${this.gameState.chunks.size}`);
     
     // Trigger state update
     this.onStateUpdate(this.gameState);
@@ -345,6 +354,10 @@ export class NetworkManager {
    */
   private handleMessage(message: any) {
     switch (message.type) {
+      case "block_mapping":
+        this.handleBlockMapping(message);
+        break;
+
       case "world_assign":
         this.handleWorldAssign(message);
         break;
@@ -368,6 +381,19 @@ export class NetworkManager {
       default:
         logger.warn(`[Network] Unknown message type: ${message.type}`);
     }
+  }
+
+  /**
+   * Handle block mapping table from server
+   */
+  private handleBlockMapping(message: any) {
+    logger.info(`[Network] Received block mapping table: ${message.mappings.length} blocks`);
+    
+    // Import blockMapping here to avoid circular dependency
+    import('./data/BlockRegistry').then(({ blockMapping }) => {
+      blockMapping.loadMappingTable(message.mappings);
+      logger.info('[Network] Block mapping synchronized with server');
+    });
   }
 
   /**
@@ -500,6 +526,7 @@ export class NetworkManager {
    * Request chunk from server
    */
   requestChunk(cx: number, cy: number, cz: number) {
+    logger.debug(`[Network] Requesting chunk (${cx}, ${cy}, ${cz})`);
     this.sendMessage({
       type: "chunk_request",
       cx,

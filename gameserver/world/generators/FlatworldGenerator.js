@@ -4,6 +4,7 @@
  */
 
 const { Chunk, CHUNK_SIZE } = require('../Chunk');
+const { blockMapping } = require('../../BlockRegistry');
 
 class FlatworldGenerator {
     /**
@@ -21,7 +22,13 @@ class FlatworldGenerator {
         // Calculate total height of solid ground
         this.groundHeight = this.grassLayers + this.dirtLayers + this.stoneLayers;
         
+        // Get numeric IDs from string IDs (for network efficiency)
+        this.stoneId = blockMapping.getNumericId('vaste:stone');
+        this.dirtId = blockMapping.getNumericId('vaste:dirt');
+        this.grassId = blockMapping.getNumericId('vaste:grass');
+        
         console.log(`[FlatworldGenerator] Created with ${this.groundHeight} blocks of terrain`);
+        console.log(`[FlatworldGenerator] Block IDs: stone=${this.stoneId}, dirt=${this.dirtId}, grass=${this.grassId}`);
     }
 
     /**
@@ -60,11 +67,11 @@ class FlatworldGenerator {
                     let blockType;
                     
                     if (depthFromTop < this.grassLayers) {
-                        blockType = 3; // Grass
+                        blockType = this.grassId; // Grass
                     } else if (depthFromTop < this.grassLayers + this.dirtLayers) {
-                        blockType = 2; // Dirt
+                        blockType = this.dirtId; // Dirt
                     } else {
-                        blockType = 1; // Stone
+                        blockType = this.stoneId; // Stone
                     }
                     
                     chunk.setBlock(localX, localY, localZ, blockType);

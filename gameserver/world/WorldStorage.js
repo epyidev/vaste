@@ -130,8 +130,16 @@ class WorldStorage {
         const metadataPath = path.join(this.worldPath, 'world.json');
         
         try {
-            fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
-            console.log(`[WorldStorage] Saved world metadata`);
+            // Add block mapping table to metadata
+            const { blockMapping } = require('../BlockRegistry');
+            const enrichedMetadata = {
+                ...metadata,
+                blockMappings: blockMapping.exportMappingTable(), // Save string<->numeric mapping
+                savedAt: new Date().toISOString()
+            };
+            
+            fs.writeFileSync(metadataPath, JSON.stringify(enrichedMetadata, null, 2));
+            console.log(`[WorldStorage] Saved world metadata with ${enrichedMetadata.blockMappings.length} block mappings`);
         } catch (error) {
             console.error(`[WorldStorage] Error saving metadata: ${error.message}`);
         }
@@ -150,7 +158,28 @@ class WorldStorage {
         
         try {
             const data = fs.readFileSync(metadataPath, 'utf8');
-            return JSON.parse(data);
+            const metadata = JSON.parse(data);
+            
+            // Restore block mapping table if present
+            if (metadata.blockMappings && Array.isArray(metadata.blockMappings)) {
+                const { blockMapping } = require('../BlockRegistry');
+                
+                // Clear current mappings and reload from save file
+                blockMapping.stringToNumeric.clear();
+                blockMapping.numericToString.clear();
+                blockMapping.nextNumericId = 1;
+                
+                // Re-register blocks with their saved numeric IDs
+                for (const { stringId, numericId } of metadata.blockMappings) {
+                    blockMapping.registerBlock(stringId, numericId);
+                }
+                
+                console.log(`[WorldStorage] Restored ${metadata.blockMappings.length} block mappings from save file`);
+            } else {
+                console.log(`[WorldStorage] No block mappings in save file (old world format)`);
+            }
+            
+            return metadata;
         } catch (error) {
             console.error(`[WorldStorage] Error loading metadata: ${error.message}`);
             return null;

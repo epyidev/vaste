@@ -1,16 +1,10 @@
-/**
- * Game.tsx - Main game component
- * Handles player controls, world rendering, and network communication
- */
-
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import { PointerLockControls, Sky } from "@react-three/drei";
 import * as THREE from "three";
-import { NetworkManager, GameState } from "./network";
-import { OptimizedWorld } from "./components/OptimizedWorld";
-import { ChunkCoords, DEFAULT_RENDER_CONFIG } from "./types";
-import { logger } from "./utils/logger";
+import { NetworkManager } from "./network";
+import { VoxelWorld } from "./components/VoxelWorldNew";
+import { PlayerController } from "./components/PlayerController";
 
 interface GameProps {
   serverUrl: string;
@@ -18,258 +12,141 @@ interface GameProps {
 }
 
 export function Game({ serverUrl, user }: GameProps) {
-  const [gameState, setGameState] = useState<GameState | null>(null);
-  const [connected, setConnected] = useState(false);
-  const [worldAssigned, setWorldAssigned] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [loadingMessage, setLoadingMessage] = useState("Connecting to server...");
-  
+  const [connected, setConnected] = useState(false);
+  const [spawnPoint, setSpawnPoint] = useState({ x: 0, y: 50, z: 0 });
+  const [chunks, setChunks] = useState<Map<string, any>>(new Map());
   const networkRef = useRef<NetworkManager | null>(null);
-  const playerPositionRef = useRef({ x: 0, y: 70, z: 0 });
-  const playerVelocityRef = useRef({ x: 0, y: 0, z: 0 });
-  const keysRef = useRef<{ [key: string]: boolean }>({});
-  const lastUpdateRef = useRef(Date.now());
+  const controlsRef = useRef<any>(null);
 
-  // Movement settings
-  const MOVE_SPEED = 5;
-  const JUMP_FORCE = 8;
-  const GRAVITY = 20;
-  const GROUND_Y = 64; // Default ground level for flatworld
-
-  // Initialize network manager
   useEffect(() => {
     const network = new NetworkManager(
       (state) => {
-        setGameState(state);
+        // Update chunks whenever state changes
+        setChunks(new Map(state.chunks));
       },
-      (isConnected) => {
-        setConnected(isConnected);
-        if (!isConnected) {
-          setLoadingMessage("Disconnected from server");
-          setLoading(true);
-        }
-      },
-      user
+      (isConnected) => setConnected(isConnected)
     );
-
-    // Set world assignment callback
-    network.setOnWorldAssigned((spawnPoint) => {
-      logger.info(`[Game] World assigned, spawning at (${spawnPoint.x}, ${spawnPoint.y}, ${spawnPoint.z})`);
-      
-      playerPositionRef.current = { ...spawnPoint };
-      setWorldAssigned(true);
+    
+    network.setAuthenticatedUser(user);
+    network.setOnWorldAssigned((spawn) => {
+      setSpawnPoint(spawn);
       setLoading(false);
     });
-
+    
     networkRef.current = network;
-
-    // Connect to server
-    network.connect(serverUrl).then(() => {
-      logger.info("[Game] Connected to server");
-      setLoadingMessage("Waiting for world assignment...");
-    }).catch((error) => {
-      logger.error("[Game] Connection error:", error);
-      setLoadingMessage("Failed to connect to server");
-    });
-
-    return () => {
-      network.disconnect();
-    };
+    network.connect(serverUrl);
+    
+    return () => network.disconnect();
   }, [serverUrl, user]);
 
-  // Keyboard controls
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      keysRef.current[e.code] = true;
-
-      // Jump
-      if (e.code === "Space" && playerPositionRef.current.y <= GROUND_Y + 0.1) {
-        playerVelocityRef.current.y = JUMP_FORCE;
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      keysRef.current[e.code] = false;
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-    };
-  }, []);
-
-  // Game loop - update player physics and send position
-  useEffect(() => {
-    if (!worldAssigned || !networkRef.current) return;
-
-    const interval = setInterval(() => {
-      const now = Date.now();
-      const deltaTime = (now - lastUpdateRef.current) / 1000;
-      lastUpdateRef.current = now;
-
-      const keys = keysRef.current;
-      const position = playerPositionRef.current;
-      const velocity = playerVelocityRef.current;
-
-      // Calculate movement direction
-      let moveX = 0;
-      let moveZ = 0;
-
-      if (keys["KeyW"]) moveZ -= 1;
-      if (keys["KeyS"]) moveZ += 1;
-      if (keys["KeyA"]) moveX -= 1;
-      if (keys["KeyD"]) moveX += 1;
-
-      // Normalize diagonal movement
-      if (moveX !== 0 && moveZ !== 0) {
-        const length = Math.sqrt(moveX * moveX + moveZ * moveZ);
-        moveX /= length;
-        moveZ /= length;
-      }
-
-      // Apply movement
-      position.x += moveX * MOVE_SPEED * deltaTime;
-      position.z += moveZ * MOVE_SPEED * deltaTime;
-
-      // Apply gravity
-      velocity.y -= GRAVITY * deltaTime;
-      position.y += velocity.y * deltaTime;
-
-      // Ground collision
-      if (position.y < GROUND_Y) {
-        position.y = GROUND_Y;
-        velocity.y = 0;
-      }
-
-      // Send position to server (every 50ms)
-      if (networkRef.current) {
-        networkRef.current.sendPlayerMove(position.x, position.y, position.z);
-      }
-    }, 50);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [worldAssigned]);
-
-  // Loading screen
-  if (loading || !gameState || !worldAssigned) {
+  if (loading) {
     return (
       <div style={{
         position: "fixed",
-        top: 0,
-        left: 0,
         width: "100vw",
         height: "100vh",
+        background: "linear-gradient(to bottom, #1a1a2e 0%, #0f0f1e 100%)",
+        color: "#fff",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#1a1a2e",
-        color: "#eee",
-        fontFamily: "monospace",
+        fontFamily: "Arial, sans-serif"
       }}>
-        <div style={{ fontSize: "24px", marginBottom: "20px" }}>
-          {loadingMessage}
+        <div style={{ fontSize: "32px", marginBottom: "20px" }}>Vaste</div>
+        <div style={{ fontSize: "18px", opacity: 0.7 }}>
+          {connected ? "Loading world..." : "Connecting to server..."}
         </div>
-        <div style={{ fontSize: "14px", color: "#888" }}>
-          {connected ? "Connected" : "Disconnected"}
-        </div>
-        {connected && !worldAssigned && (
-          <div style={{ marginTop: "20px", fontSize: "12px", color: "#666", maxWidth: "400px", textAlign: "center" }}>
-            Waiting for the server mod to create a world...
-            <br />
-            The server must call CreateOrLoadWorld() before you can join.
-          </div>
-        )}
       </div>
     );
   }
 
   return (
-    <div style={{ width: "100vw", height: "100vh" }}>
+    <div style={{ position: "fixed", width: "100vw", height: "100vh" }}>
       <Canvas
         camera={{
-          position: [playerPositionRef.current.x, playerPositionRef.current.y + 1.6, playerPositionRef.current.z],
+          position: [spawnPoint.x, spawnPoint.y, spawnPoint.z],
           fov: 75,
           near: 0.1,
-          far: 1000,
+          far: 1000
         }}
+        shadows
       >
+        {/* Controls */}
+        <PointerLockControls ref={controlsRef} />
+        
+        {/* Player Controller */}
+        <PlayerController 
+          controlsRef={controlsRef}
+          spawnPoint={spawnPoint}
+          networkManager={networkRef.current}
+        />
+        
+        {/* Sky */}
+        <Sky
+          distance={450000}
+          sunPosition={[100, 20, 100]}
+          inclination={0.6}
+          azimuth={0.25}
+        />
+        
         {/* Lighting */}
         <ambientLight intensity={0.5} />
         <directionalLight
-          position={[50, 100, 50]}
-          intensity={1}
+          position={[50, 50, 25]}
+          intensity={0.8}
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
+          shadow-camera-far={200}
+          shadow-camera-left={-50}
+          shadow-camera-right={50}
+          shadow-camera-top={50}
+          shadow-camera-bottom={-50}
         />
-
-        {/* Sky */}
-        <Sky sunPosition={[100, 100, 100]} />
-
-        {/* World */}
-        <OptimizedWorld
-          chunks={gameState.chunks}
-          playerPosition={playerPositionRef.current}
-          renderDistance={{
-            horizontal: DEFAULT_RENDER_CONFIG.horizontalDistance,
-            vertical: DEFAULT_RENDER_CONFIG.verticalDistance,
-          }}
-        />
-
-        {/* Controls */}
-        <PointerLockControls
-          onUpdate={(controls) => {
-            // Update camera position to follow player
-            const camera = controls.getObject();
-            camera.position.x = playerPositionRef.current.x;
-            camera.position.y = playerPositionRef.current.y + 1.6; // Eye height
-            camera.position.z = playerPositionRef.current.z;
-          }}
+        
+        {/* Fog */}
+        <fog attach="fog" args={["#87CEEB", 80, 200]} />
+        
+        {/* Voxel World */}
+        <VoxelWorld 
+          chunks={chunks}
+          controlsRef={controlsRef}
         />
       </Canvas>
 
       {/* HUD */}
       <div style={{
-        position: "fixed",
-        top: "10px",
-        left: "10px",
-        color: "white",
+        position: "absolute",
+        top: "20px",
+        left: "20px",
+        color: "#fff",
         fontFamily: "monospace",
-        fontSize: "12px",
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
-        padding: "10px",
-        borderRadius: "5px",
-        pointerEvents: "none",
+        fontSize: "14px",
+        textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
+        userSelect: "none",
+        pointerEvents: "none"
       }}>
-        <div>Position: ({Math.floor(playerPositionRef.current.x)}, {Math.floor(playerPositionRef.current.y)}, {Math.floor(playerPositionRef.current.z)})</div>
-        <div>Chunks: {gameState.chunks.size}</div>
-        <div>Players: {gameState.players.size}</div>
-        {gameState.generatorType && <div>Generator: {gameState.generatorType}</div>}
+        <div>Chunks loaded: {chunks.size}</div>
+        <div style={{ marginTop: "5px", opacity: 0.7 }}>
+          Press ESC to unlock cursor
+        </div>
       </div>
 
-      {/* Controls info */}
+      {/* Crosshair */}
       <div style={{
-        position: "fixed",
-        bottom: "10px",
-        left: "10px",
-        color: "white",
-        fontFamily: "monospace",
-        fontSize: "11px",
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
-        padding: "10px",
-        borderRadius: "5px",
-        pointerEvents: "none",
+        position: "absolute",
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -50%)",
+        pointerEvents: "none"
       }}>
-        <div>WASD: Move</div>
-        <div>Space: Jump</div>
-        <div>Mouse: Look around</div>
-        <div>Click to lock cursor</div>
+        <svg width="40" height="40">
+          <line x1="20" y1="15" x2="20" y2="25" stroke="white" strokeWidth="2" />
+          <line x1="15" y1="20" x2="25" y2="20" stroke="white" strokeWidth="2" />
+          <circle cx="20" cy="20" r="3" fill="none" stroke="white" strokeWidth="1" opacity="0.5" />
+        </svg>
       </div>
     </div>
   );
