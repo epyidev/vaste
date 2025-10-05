@@ -20,14 +20,19 @@ export class ChunkManager {
   private chunks = new Map<string, CachedChunk>();
   private material: THREE.Material;
   private maxCached = 1000;
+  private ambientOcclusionEnabled: boolean;
 
-  constructor(texture?: THREE.Texture) {
+  constructor(texture?: THREE.Texture, ambientOcclusionEnabled: boolean = false) {
+    this.ambientOcclusionEnabled = ambientOcclusionEnabled;
+    
     this.material = new THREE.MeshStandardMaterial({
       map: texture || null,
       side: THREE.DoubleSide, // Temporary: render both sides for debugging
       roughness: 1.0,
       metalness: 0.0,
-      color: texture ? 0xffffff : 0x88cc88
+      color: texture ? 0xffffff : 0x88cc88,
+      // Enable vertex colors for ambient occlusion
+      vertexColors: ambientOcclusionEnabled
     });
 
     if (texture) {
@@ -49,7 +54,7 @@ export class ChunkManager {
       }
     }
 
-    const geometry = GeometryBuilder.buildGeometry(chunk);
+    const geometry = GeometryBuilder.buildGeometry(chunk, this.ambientOcclusionEnabled);
     if (!geometry) return null;
 
     const mesh = new THREE.Mesh(geometry, this.material);

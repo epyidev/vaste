@@ -45,11 +45,12 @@ export class GeometryBuilder {
 
   private static hasLoggedUVs = false;
 
-  static buildGeometry(chunk: ChunkData): THREE.BufferGeometry | null {
+  static buildGeometry(chunk: ChunkData, enableAO: boolean = false): THREE.BufferGeometry | null {
     const positions: number[] = [];
     const normals: number[] = [];
     const uvs: number[] = [];
     const indices: number[] = [];
+    const colors: number[] = []; // For ambient occlusion
 
     const offsetX = chunk.cx * CHUNK_SIZE;
     const offsetY = chunk.cy * CHUNK_SIZE;
@@ -67,32 +68,38 @@ export class GeometryBuilder {
 
           if (this.shouldRenderFace(chunk.blocks, x, y, z, 0, 1, 0)) {
             const faceUVs = this.getUVs(blockId, 0);
-            this.addFace(positions, normals, uvs, indices, wx, wy + 1, wz, 1, 0, 0, 0, 0, 1, 0, 1, 0, faceUVs);
+            const ao = enableAO ? 0.9 : 1.0; // Top face: slightly darker if AO enabled
+            this.addFace(positions, normals, uvs, indices, colors, wx, wy + 1, wz, 1, 0, 0, 0, 0, 1, 0, 1, 0, faceUVs, ao);
           }
 
           if (this.shouldRenderFace(chunk.blocks, x, y, z, 0, -1, 0)) {
             const faceUVs = this.getUVs(blockId, 1);
-            this.addFace(positions, normals, uvs, indices, wx, wy, wz, 1, 0, 0, 0, 0, -1, 0, -1, 0, faceUVs);
+            const ao = enableAO ? 0.5 : 1.0; // Bottom face: much darker if AO enabled
+            this.addFace(positions, normals, uvs, indices, colors, wx, wy, wz, 1, 0, 0, 0, 0, -1, 0, -1, 0, faceUVs, ao);
           }
 
           if (this.shouldRenderFace(chunk.blocks, x, y, z, 1, 0, 0)) {
             const faceUVs = this.getUVs(blockId, 2);
-            this.addFace(positions, normals, uvs, indices, wx + 1, wy, wz, 0, 1, 0, 0, 0, 1, 1, 0, 0, faceUVs);
+            const ao = enableAO ? 0.75 : 1.0; // Side face
+            this.addFace(positions, normals, uvs, indices, colors, wx + 1, wy, wz, 0, 1, 0, 0, 0, 1, 1, 0, 0, faceUVs, ao);
           }
 
           if (this.shouldRenderFace(chunk.blocks, x, y, z, -1, 0, 0)) {
             const faceUVs = this.getUVs(blockId, 3);
-            this.addFace(positions, normals, uvs, indices, wx, wy, wz, 0, 1, 0, 0, 0, -1, -1, 0, 0, faceUVs);
+            const ao = enableAO ? 0.75 : 1.0; // Side face
+            this.addFace(positions, normals, uvs, indices, colors, wx, wy, wz, 0, 1, 0, 0, 0, -1, -1, 0, 0, faceUVs, ao);
           }
 
           if (this.shouldRenderFace(chunk.blocks, x, y, z, 0, 0, 1)) {
             const faceUVs = this.getUVs(blockId, 4);
-            this.addFace(positions, normals, uvs, indices, wx, wy, wz + 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, faceUVs);
+            const ao = enableAO ? 0.75 : 1.0; // Side face
+            this.addFace(positions, normals, uvs, indices, colors, wx, wy, wz + 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, faceUVs, ao);
           }
 
           if (this.shouldRenderFace(chunk.blocks, x, y, z, 0, 0, -1)) {
             const faceUVs = this.getUVs(blockId, 5);
-            this.addFace(positions, normals, uvs, indices, wx, wy, wz, -1, 0, 0, 0, 1, 0, 0, 0, -1, faceUVs);
+            const ao = enableAO ? 0.75 : 1.0; // Side face
+            this.addFace(positions, normals, uvs, indices, colors, wx, wy, wz, -1, 0, 0, 0, 1, 0, 0, 0, -1, faceUVs, ao);
           }
         }
       }
@@ -106,6 +113,12 @@ export class GeometryBuilder {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    
+    // Add color attribute for ambient occlusion if enabled
+    if (enableAO && colors.length > 0) {
+      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    }
+    
     geometry.setIndex(indices);
     geometry.computeBoundingSphere();
     geometry.computeBoundingBox();
@@ -118,6 +131,7 @@ export class GeometryBuilder {
     normals: number[],
     uvs: number[],
     indices: number[],
+    colors: number[],
     x: number,
     y: number,
     z: number,
@@ -130,7 +144,8 @@ export class GeometryBuilder {
     nx: number,
     ny: number,
     nz: number,
-    uvCoords: number[]
+    uvCoords: number[],
+    aoFactor: number = 1.0 // 1.0 = full brightness, 0.5 = darker for AO
   ): void {
     const startIndex = positions.length / 3;
 
@@ -143,6 +158,8 @@ export class GeometryBuilder {
 
     for (let i = 0; i < 4; i++) {
       normals.push(nx, ny, nz);
+      // Add color for ambient occlusion (RGB, all same value for grayscale)
+      colors.push(aoFactor, aoFactor, aoFactor);
     }
 
     // Canvas Y goes down, WebGL texture V goes up

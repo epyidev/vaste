@@ -14,9 +14,10 @@ interface ChunkData {
 
 interface VoxelWorldProps {
   chunks: Map<string, ChunkData>;
+  ambientOcclusionEnabled?: boolean;
 }
 
-export function VoxelWorld({ chunks }: VoxelWorldProps) {
+export function VoxelWorld({ chunks, ambientOcclusionEnabled = false }: VoxelWorldProps) {
   const groupRef = useRef<THREE.Group>(null);
   const managerRef = useRef<ChunkManager | null>(null);
   const [ready, setReady] = useState(false);
@@ -29,10 +30,10 @@ export function VoxelWorld({ chunks }: VoxelWorldProps) {
       
       if (!texture) {
         console.error('[VoxelWorld] Failed to get atlas texture');
-        managerRef.current = new ChunkManager();
+        managerRef.current = new ChunkManager(undefined, ambientOcclusionEnabled);
       } else {
         console.log('[VoxelWorld] Atlas texture ready');
-        managerRef.current = new ChunkManager(texture);
+        managerRef.current = new ChunkManager(texture, ambientOcclusionEnabled);
       }
       
       setReady(true);
@@ -40,7 +41,7 @@ export function VoxelWorld({ chunks }: VoxelWorldProps) {
 
     init().catch((error) => {
       console.error('[VoxelWorld] Initialization error:', error);
-      managerRef.current = new ChunkManager();
+      managerRef.current = new ChunkManager(undefined, ambientOcclusionEnabled);
       setReady(true);
     });
 
@@ -49,7 +50,7 @@ export function VoxelWorld({ chunks }: VoxelWorldProps) {
         managerRef.current.dispose();
       }
     };
-  }, []);
+  }, [ambientOcclusionEnabled]); // Recréer le manager quand AO change
 
   useEffect(() => {
     if (!ready || !managerRef.current || !groupRef.current) return;

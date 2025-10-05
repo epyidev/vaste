@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Slider } from './Slider';
+import { ToggleButton } from './ToggleButton';
 
 export interface SettingsMenuProps {
   isOpen: boolean;
@@ -8,6 +9,8 @@ export interface SettingsMenuProps {
   maxRenderDistance: number;
   onRenderDistanceChange: (value: number) => void;
   forceRenderDistance?: boolean;
+  ambientOcclusionEnabled: boolean;
+  onAmbientOcclusionChange: (enabled: boolean) => void;
 }
 
 type SettingsTab = 'graphics' | 'controls';
@@ -19,6 +22,8 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
   maxRenderDistance,
   onRenderDistanceChange,
   forceRenderDistance = false,
+  ambientOcclusionEnabled,
+  onAmbientOcclusionChange,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('graphics');
   const [localRenderDistance, setLocalRenderDistance] = useState(currentRenderDistance);
@@ -206,6 +211,14 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                 label="RENDER DISTANCE"
                 description={`Controls how far you can see. Higher values may impact performance. (Max: ${maxRenderDistance})`}
                 disabled={forceRenderDistance}
+              />
+              
+              {/* Ambient Occlusion Toggle */}
+              <ToggleButton
+                value={ambientOcclusionEnabled}
+                onChange={onAmbientOcclusionChange}
+                label="AMBIENT OCCLUSION"
+                description="Adds realistic shadows in corners and crevices. May impact performance."
               />
             </>
           )}

@@ -34,6 +34,10 @@ export function Game({ serverUrl, user }: GameProps) {
   });
   const [maxRenderDistance, setMaxRenderDistance] = useState(12); // Default 12, server will override
   const [forceRenderDistance, setForceRenderDistance] = useState<boolean>(false);
+  const [ambientOcclusionEnabled, setAmbientOcclusionEnabled] = useState(() => {
+    const saved = localStorage.getItem('vaste_ambientOcclusion');
+    return saved !== null ? saved === 'true' : false; // Default disabled for performance
+  });
   const [clearChunks, setClearChunks] = useState(false);
   const networkRef = useRef<NetworkManager | null>(null);
   const controlsRef = useRef<any>(null);
@@ -355,6 +359,11 @@ export function Game({ serverUrl, user }: GameProps) {
     setTimeout(() => setClearChunks(false), 100);
   };
 
+  const handleAmbientOcclusionChange = (enabled: boolean) => {
+    setAmbientOcclusionEnabled(enabled);
+    localStorage.setItem('vaste_ambientOcclusion', enabled.toString());
+  };
+
   const handleDisconnect = () => {
     if (networkRef.current) {
       networkRef.current.disconnect();
@@ -457,7 +466,7 @@ export function Game({ serverUrl, user }: GameProps) {
         <fog attach="fog" args={["#87CEEB", 80, 200]} />
         
         {/* Voxel World */}
-        <VoxelWorld chunks={chunks} />
+        <VoxelWorld chunks={chunks} ambientOcclusionEnabled={ambientOcclusionEnabled} />
       </Canvas>
       </div>
 
@@ -514,6 +523,8 @@ export function Game({ serverUrl, user }: GameProps) {
         maxRenderDistance={maxRenderDistance}
         onRenderDistanceChange={handleRenderDistanceChange}
         forceRenderDistance={forceRenderDistance}
+        ambientOcclusionEnabled={ambientOcclusionEnabled}
+        onAmbientOcclusionChange={handleAmbientOcclusionChange}
       />
     </div>
   );
