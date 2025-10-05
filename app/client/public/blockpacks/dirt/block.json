@@ -1,5 +1,4 @@
 {
-  "id": 2,
   "name": "dirt",
   "textures": { "all": "/blockpacks/dirt/textures/dirt.png" }
 }

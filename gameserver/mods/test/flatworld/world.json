@@ -1,9 +1,38 @@
 {
-  "type": "flatworld",
-  "spawn": {
+  "generatorType": "flatworld",
+  "generatorOptions": {},
+  "spawnPoint": {
     "x": 0,
-    "y": 47,
+    "y": 46,
     "z": 0
   },
-  "height": 256
+  "created": 1759668118767,
+  "lastAccessed": 1759671906710,
+  "blockMappings": [
+    {
+      "stringId": "vaste:air",
+      "numericId": 0
+    },
+    {
+      "stringId": "vaste:stone",
+      "numericId": 1
+    },
+    {
+      "stringId": "vaste:dirt",
+      "numericId": 2
+    },
+    {
+      "stringId": "vaste:grass",
+      "numericId": 3
+    },
+    {
+      "stringId": "vaste:wood",
+      "numericId": 4
+    },
+    {
+      "stringId": "vaste:sand",
+      "numericId": 5
+    }
+  ],
+  "savedAt": "2025-10-05T13:45:06.710Z"
 }
