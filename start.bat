@@ -13,15 +13,15 @@ echo Installing dependencies...
 cd /d "%~dp0"
 
 REM Install unified backend+frontend dependencies
-echo Installing unified server dependencies...
-cd backend
+echo Installing unified app dependencies...
+cd app
 call npm install
 cd ..
 
 REM Install game server dependencies
-if not exist "server\node_modules" (
+if not exist "gameserver\node_modules" (
     echo Installing game server dependencies...
-    cd server
+    cd gameserver
     call npm install
     cd ..
 )
@@ -33,21 +33,21 @@ echo ====================================
 
 REM Build frontend
 echo Building frontend...
-cd backend
+cd app
 call npm run build
 cd ..
 
-REM Start unified server (backend first for license checking)
+REM Start unified server (app first for license checking)
 echo Starting unified server (backend + frontend) on port 8080...
-start "Vaste Unified Server" cmd /k "cd /d %~dp0backend && npm start"
+start "Vaste Unified Server" cmd /k "cd /d %~dp0app && npm start"
 
-REM Wait for backend to start
-echo Waiting 5 seconds for backend to start...
+REM Wait for app to start
+echo Waiting 5 seconds for app to start...
 timeout /t 5 /nobreak > nul
 
 REM Start game server
 echo Starting game server on port 25565...
-start "Vaste Game Server" cmd /k "cd /d %~dp0server && node server.js"
+start "Vaste Game Server" cmd /k "cd /d %~dp0gameserver && node server.js"
 
 echo.
 echo ====================================
