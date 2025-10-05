@@ -10,7 +10,7 @@ A multiplayer voxel game built with React and Node.js. Create an account, connec
 
 ### Setup
 1. Create a MySQL database called `vaste_backend`
-2. Create a `.env` file in `/backend`:
+2. Create a `.env` file in `/app`:
 ```
 DB_HOST=localhost
 DB_USER=your_user
@@ -28,5 +28,5 @@ Run the startup script:
 Then open **http://localhost:8080** and play!
 
 ## Architecture
-- `/backend` - Unified Express.js server + React frontend (port 8080)
-- `/server` - Game server (WebSocket, port 25565)
+- `/app` - Unified Express.js server + React frontend (port 8080)
+- `/gameserver` - Game server (WebSocket, port 25565)
