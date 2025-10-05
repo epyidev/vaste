@@ -440,7 +440,7 @@ class GameServer {
     log(`Sent block mapping table to ${user.username}: ${mappingTable.length} blocks`);
 
     // Send world assignment message
-    const maxRenderDistance = SERVER_CONFIG.maxRenderDistance || 7;
+    const maxRenderDistance = SERVER_CONFIG.maxRenderDistance || 12; // Default 12 if not configured
     const forceRenderDistance = SERVER_CONFIG.forceRenderDistance === true;
     
     const worldAssignMsg = ChunkProtocol.createWorldAssignMessage({

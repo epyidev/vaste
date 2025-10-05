@@ -7,6 +7,7 @@ export interface SettingsMenuProps {
   currentRenderDistance: number;
   maxRenderDistance: number;
   onRenderDistanceChange: (value: number) => void;
+  forceRenderDistance?: boolean;
 }
 
 type SettingsTab = 'graphics' | 'controls';
@@ -17,6 +18,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
   currentRenderDistance,
   maxRenderDistance,
   onRenderDistanceChange,
+  forceRenderDistance = false,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('graphics');
   const [localRenderDistance, setLocalRenderDistance] = useState(currentRenderDistance);
@@ -203,6 +205,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                 onChange={setLocalRenderDistance}
                 label="RENDER DISTANCE"
                 description={`Controls how far you can see. Higher values may impact performance. (Max: ${maxRenderDistance})`}
+                disabled={forceRenderDistance}
               />
             </>
           )}

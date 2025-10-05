@@ -32,7 +32,7 @@ export function Game({ serverUrl, user }: GameProps) {
     const saved = localStorage.getItem('vaste_renderDistance');
     return saved ? parseInt(saved) : 4;
   });
-  const [maxRenderDistance, setMaxRenderDistance] = useState(7);
+  const [maxRenderDistance, setMaxRenderDistance] = useState(12); // Default 12, server will override
   const [forceRenderDistance, setForceRenderDistance] = useState<boolean>(false);
   const [clearChunks, setClearChunks] = useState(false);
   const networkRef = useRef<NetworkManager | null>(null);
@@ -97,18 +97,23 @@ export function Game({ serverUrl, user }: GameProps) {
     network.setOnWorldAssigned((spawn, serverSettings) => {
       setSpawnPoint(spawn);
       
+      console.log('[Game] Received server settings:', serverSettings);
+      
       // Apply server render distance settings
       if (serverSettings?.maxRenderDistance !== undefined) {
+        console.log('[Game] Setting maxRenderDistance to:', serverSettings.maxRenderDistance);
         setMaxRenderDistance(serverSettings.maxRenderDistance);
+      } else {
+        console.log('[Game] No maxRenderDistance from server, using default 12');
       }
       if (serverSettings?.forceRenderDistance === true) {
         setForceRenderDistance(true);
-        setRenderDistance(serverSettings.maxRenderDistance || 7);
-        localStorage.setItem('vaste_renderDistance', (serverSettings.maxRenderDistance || 7).toString());
+        setRenderDistance(serverSettings.maxRenderDistance || 12);
+        localStorage.setItem('vaste_renderDistance', (serverSettings.maxRenderDistance || 12).toString());
       } else {
         // Clamp client render distance to server max
         const currentRenderDistance = parseInt(localStorage.getItem('vaste_renderDistance') || '4');
-        const clampedRenderDistance = Math.min(currentRenderDistance, serverSettings?.maxRenderDistance || 7);
+        const clampedRenderDistance = Math.min(currentRenderDistance, serverSettings?.maxRenderDistance || 12);
         setRenderDistance(clampedRenderDistance);
         localStorage.setItem('vaste_renderDistance', clampedRenderDistance.toString());
       }
@@ -508,6 +513,7 @@ export function Game({ serverUrl, user }: GameProps) {
         currentRenderDistance={renderDistance}
         maxRenderDistance={maxRenderDistance}
         onRenderDistanceChange={handleRenderDistanceChange}
+        forceRenderDistance={forceRenderDistance}
       />
     </div>
   );

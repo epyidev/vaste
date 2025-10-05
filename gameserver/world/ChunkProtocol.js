@@ -31,6 +31,8 @@ class ChunkProtocol {
             worldId: worldInfo.worldId || 'main',
             spawnPoint: worldInfo.spawnPoint,
             generatorType: worldInfo.generatorType,
+            maxRenderDistance: worldInfo.maxRenderDistance,
+            forceRenderDistance: worldInfo.forceRenderDistance,
             timestamp: Date.now()
         });
     }

@@ -7,6 +7,7 @@ export interface SliderProps {
   onChange: (value: number) => void;
   label?: string;
   description?: string;
+  disabled?: boolean;
 }
 
 export const Slider: React.FC<SliderProps> = ({
@@ -16,13 +17,14 @@ export const Slider: React.FC<SliderProps> = ({
   onChange,
   label,
   description,
+  disabled = false,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const sliderRef = useRef<HTMLDivElement>(null);
 
   const updateValue = (clientX: number) => {
-    if (!sliderRef.current) return;
+    if (!sliderRef.current || disabled) return;
     
     const rect = sliderRef.current.getBoundingClientRect();
     const x = clientX - rect.left;
@@ -34,6 +36,7 @@ export const Slider: React.FC<SliderProps> = ({
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (disabled) return;
     e.preventDefault();
     setIsDragging(true);
     updateValue(e.clientX);
@@ -85,8 +88,10 @@ export const Slider: React.FC<SliderProps> = ({
   const sliderTrackWrapperStyles: React.CSSProperties = {
     flex: 1,
     padding: '12px 0', // Zone de hit plus large
-    cursor: isDragging ? 'grabbing' : 'grab',
+    cursor: disabled ? 'not-allowed' : (isDragging ? 'grabbing' : 'grab'),
     userSelect: 'none',
+    opacity: disabled ? 0.5 : 1,
+    transition: 'opacity 0.2s ease',
   };
 
   const sliderTrackStyles: React.CSSProperties = {
@@ -140,6 +145,14 @@ export const Slider: React.FC<SliderProps> = ({
     letterSpacing: '0.3px',
   };
 
+  const lockedMessageStyles: React.CSSProperties = {
+    color: '#ff6b6b',
+    fontSize: '12px',
+    letterSpacing: '0.3px',
+    marginTop: '-4px',
+    fontStyle: 'italic',
+  };
+
   return (
     <div style={containerStyles}>
       {label && <div style={labelStyles}>{label}</div>}
@@ -148,7 +161,7 @@ export const Slider: React.FC<SliderProps> = ({
         <div 
           style={sliderTrackWrapperStyles}
           onMouseDown={handleMouseDown}
-          onMouseEnter={() => setIsHovering(true)}
+          onMouseEnter={() => !disabled && setIsHovering(true)}
           onMouseLeave={() => setIsHovering(false)}
         >
           <div ref={sliderRef} style={sliderTrackStyles}>
@@ -160,6 +173,7 @@ export const Slider: React.FC<SliderProps> = ({
       </div>
 
       {description && <div style={descriptionStyles}>{description}</div>}
+      {disabled && <div style={lockedMessageStyles}>Server does not allow render distance modification</div>}
     </div>
   );
 };
