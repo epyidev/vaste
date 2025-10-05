@@ -3,7 +3,7 @@ import { Canvas } from "@react-three/fiber";
 import { PointerLockControls, Sky } from "@react-three/drei";
 import * as THREE from "three";
 import { NetworkManager } from "./network";
-import { VoxelWorld } from "./components/VoxelWorldNew";
+import { VoxelWorld } from "./components/VoxelWorld";
 import { PlayerController } from "./components/PlayerController";
 
 interface GameProps {
@@ -66,7 +66,7 @@ export function Game({ serverUrl, user }: GameProps) {
     <div style={{ position: "fixed", width: "100vw", height: "100vh" }}>
       <Canvas
         camera={{
-          position: [spawnPoint.x, spawnPoint.y, spawnPoint.z],
+          position: [spawnPoint.x, spawnPoint.y + 1.8, spawnPoint.z],
           fov: 75,
           near: 0.1,
           far: 1000
@@ -110,10 +110,7 @@ export function Game({ serverUrl, user }: GameProps) {
         <fog attach="fog" args={["#87CEEB", 80, 200]} />
         
         {/* Voxel World */}
-        <VoxelWorld 
-          chunks={chunks}
-          controlsRef={controlsRef}
-        />
+        <VoxelWorld chunks={chunks} />
       </Canvas>
 
       {/* HUD */}

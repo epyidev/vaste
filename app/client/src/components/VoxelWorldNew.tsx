@@ -1,216 +1,214 @@
-import { useEffect, useState, useRef } from "react";
-import * as THREE from "three";
-import { textureAtlas } from "../utils/TextureAtlasManager";
-import { blockMapping } from "../data/BlockRegistry";
+﻿/**
+ * VoxelWorldNew.tsx - Professional voxel world rendering component
+ * Features:
+ * - Optimized chunk rendering with frustum culling
+ * - Efficient memory management
+ * - Incremental updates without freezes
+ * - Proper texture atlas support
+ */
+
+import { useEffect, useRef, useMemo, useState } from 'react';
+import { useFrame } from '@react-three/fiber';
+import * as THREE from 'three';
+import { ChunkData } from '../types';
+import { ChunkRenderer } from '../voxel/ChunkRenderer';
+import { TextureAtlasBuilder, BlockTextureDef } from '../voxel/TextureAtlasBuilder';
+import { BlockTextureMapping } from '../voxel/MeshBuilder';
+import { logger } from '../utils/logger';
 
 interface VoxelWorldProps {
-  chunks: Map<string, any>;
-  controlsRef: React.RefObject<any>;
+  chunks: Map<string, ChunkData>;
+  playerPosition?: { x: number; y: number; z: number };
+  renderDistance?: number;
+  onStatsUpdate?: (stats: { chunksLoaded: number; totalVertices: number; totalTriangles: number }) => void;
 }
 
-interface MeshData {
-  positions: Float32Array;
-  normals: Float32Array;
-  uvs: Float32Array;
-  indices: Uint32Array;
-  blockType: number;
-}
+export function VoxelWorldNew({ 
+  chunks, 
+  playerPosition = { x: 0, y: 0, z: 0 },
+  renderDistance = 256,
+  onStatsUpdate
+}: VoxelWorldProps) {
+  const groupRef = useRef<THREE.Group>(null);
+  const chunkRendererRef = useRef<ChunkRenderer | null>(null);
+  const [isAtlasReady, setIsAtlasReady] = useState(false);
+  const [stats, setStats] = useState({ chunksLoaded: 0, totalVertices: 0, totalTriangles: 0 });
 
-interface GeneratedMesh {
-  chunkKey: string;
-  meshes: MeshData[];
-}
-
-const CHUNK_SIZE = 16;
-
-export function VoxelWorld({ chunks, controlsRef }: VoxelWorldProps) {
-  const [texturesLoaded, setTexturesLoaded] = useState(false);
-  const [generatedMeshes, setGeneratedMeshes] = useState<Map<string, MeshData[]>>(new Map());
-  
-  const workerRef = useRef<Worker | null>(null);
-  const requestIdRef = useRef(0);
-  const pendingRequestsRef = useRef<Map<number, string>>(new Map());
-
-  // Initialize worker
+  // Initialize texture atlas and chunk renderer
   useEffect(() => {
-    console.log("[VoxelWorld] Initializing mesh generator worker...");
+    console.log('🚀 [VoxelWorld] useEffect triggered - Starting initialization');
     
-    const worker = new Worker(
-      new URL("../workers/meshGeneratorWorker.ts", import.meta.url),
-      { type: "module" }
-    );
-
-    // Handle worker messages
-    worker.onmessage = (e: MessageEvent) => {
-      const { type } = e.data;
-
-      if (type === 'mappingLoaded') {
-        console.log("[VoxelWorld] Worker mapping loaded");
-        return;
+    const initAtlas = async () => {
+      try {
+        console.log('🎨 [VoxelWorld] Initializing texture atlas...');
+        const builder = new TextureAtlasBuilder();
+        
+        console.log('📦 [VoxelWorld] Calling buildDefaultAtlas()...');
+        const atlasResult = await builder.buildDefaultAtlas();
+        
+        console.log('✅ [VoxelWorld] Atlas result received:', atlasResult);
+        console.log('🔧 [VoxelWorld] Creating chunk renderer...');
+        chunkRendererRef.current = new ChunkRenderer(
+          atlasResult.texture,
+          atlasResult.mapping
+        );
+        
+        setIsAtlasReady(true);
+        console.log('✅ [VoxelWorld] Voxel world initialized successfully');
+      } catch (err) {
+        console.error('❌ [VoxelWorld] Failed to initialize voxel world:', err);
+        console.error('❌ [VoxelWorld] Error stack:', err instanceof Error ? err.stack : 'No stack');
+        
+        // Fallback: create renderer without atlas (will use colored materials)
+        console.warn('⚠️ [VoxelWorld] Using fallback renderer without textures');
+        chunkRendererRef.current = new ChunkRenderer();
+        setIsAtlasReady(true);
       }
+    };
 
-      if (type === 'meshGenerated') {
-        const { requestId, chunkKey, meshes } = e.data as {
-          requestId: number;
-          chunkKey: string;
-          meshes: MeshData[];
+    initAtlas();
+
+    // Cleanup on unmount
+    return () => {
+      if (chunkRendererRef.current) {
+        chunkRendererRef.current.dispose();
+        chunkRendererRef.current = null;
+      }
+    };
+  }, []);
+
+  // Update chunk meshes when chunks change
+  useEffect(() => {
+    if (!isAtlasReady || !chunkRendererRef.current || !groupRef.current) {
+      console.log(`⏸️ [VoxelWorld] Waiting for initialization... (atlasReady: ${isAtlasReady}, renderer: ${!!chunkRendererRef.current}, group: ${!!groupRef.current})`);
+      return;
+    }
+
+    const renderer = chunkRendererRef.current;
+    const group = groupRef.current;
+
+    // Process chunks incrementally to avoid freezes
+    const chunkKeys = Array.from(chunks.keys());
+    const existingKeys = new Set(renderer.getAllMeshes().map(m => m.userData.chunkKey));
+
+    console.log(`🔄 [VoxelWorld] Processing ${chunkKeys.length} chunks (${existingKeys.size} already rendered)`);
+
+    // Remove chunks that no longer exist
+    for (const key of existingKeys) {
+      if (!chunks.has(key)) {
+        const [cx, cy, cz] = key.split(',').map(Number);
+        const mesh = renderer.getChunkMesh(cx, cy, cz);
+        if (mesh) {
+          group.remove(mesh);
+        }
+        renderer.removeChunk(cx, cy, cz);
+      }
+    }
+
+    // Add/update chunks (process in batches to avoid freezing)
+    const batchSize = 10;
+    let processed = 0;
+
+    const processBatch = () => {
+      const batch = chunkKeys.slice(processed, processed + batchSize);
+      
+      for (const key of batch) {
+        const chunk = chunks.get(key)!;
+        
+        // Convert ChunkData to BlockData format
+        const blockData = {
+          blocks: chunk.blocksArray,
+          cx: chunk.cx,
+          cy: chunk.cy,
+          cz: chunk.cz,
         };
 
-        pendingRequestsRef.current.delete(requestId);
+        // Check if chunk already rendered
+        const existingMesh = renderer.getChunkMesh(chunk.cx, chunk.cy, chunk.cz);
         
-        setGeneratedMeshes(prev => {
-          const next = new Map(prev);
-          next.set(chunkKey, meshes);
-          return next;
-        });
-
-        console.log(`[VoxelWorld] Received ${meshes.length} meshes for chunk ${chunkKey}`);
-      }
-
-      if (type === 'error') {
-        console.error('[VoxelWorld] Worker error:', e.data.error);
-        pendingRequestsRef.current.delete(e.data.requestId);
-      }
-    };
-
-    worker.onerror = (error) => {
-      console.error('[VoxelWorld] Worker error:', error);
-    };
-
-    workerRef.current = worker;
-
-    // Send block mapping to worker
-    worker.postMessage({
-      type: 'loadMapping',
-      mappings: blockMapping.exportMappingTable()
-    });
-
-    return () => {
-      worker.terminate();
-      console.log("[VoxelWorld] Worker terminated");
-    };
-  }, []);
-
-  // Preload textures
-  useEffect(() => {
-    console.log("[VoxelWorld] Loading blockpack textures...");
-    textureAtlas.preloadBlockpacks().then(() => {
-      console.log("[VoxelWorld] Textures loaded!");
-      setTexturesLoaded(true);
-    });
-
-    return () => {
-      textureAtlas.dispose();
-    };
-  }, []);
-
-  // Generate meshes for new chunks
-  useEffect(() => {
-    if (!workerRef.current || !texturesLoaded) return;
-
-    chunks.forEach((chunkData, key) => {
-      // Skip if already generated or pending
-      if (generatedMeshes.has(key)) return;
-      if (Array.from(pendingRequestsRef.current.values()).includes(key)) return;
-
-      // Skip if no blocks
-      if (!chunkData.blocksArray || chunkData.blocksArray.length === 0) return;
-
-      // Request mesh generation
-      const requestId = requestIdRef.current++;
-      pendingRequestsRef.current.set(requestId, key);
-
-      // Collect neighbor chunks for face culling
-      const neighborChunks: { [key: string]: number[] } = {};
-      const { cx, cy, cz } = chunkData;
-
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dz = -1; dz <= 1; dz++) {
-            if (dx === 0 && dy === 0 && dz === 0) continue;
-            
-            const neighborKey = `${cx + dx},${cy + dy},${cz + dz}`;
-            const neighbor = chunks.get(neighborKey);
-            
-            if (neighbor && neighbor.blocksArray) {
-              neighborChunks[neighborKey] = Array.from(neighbor.blocksArray);
-            }
+        if (!existingMesh) {
+          // Create new mesh
+          const mesh = renderer.getOrCreateChunkMesh(blockData);
+          if (mesh) {
+            mesh.userData.chunkKey = key;
+            group.add(mesh);
+          }
+        } else if (chunk.version && existingMesh.userData.version !== chunk.version) {
+          // Update existing mesh if version changed
+          group.remove(existingMesh);
+          const newMesh = renderer.updateChunkMesh(blockData);
+          if (newMesh) {
+            newMesh.userData.chunkKey = key;
+            newMesh.userData.version = chunk.version;
+            group.add(newMesh);
           }
         }
       }
 
-      workerRef.current!.postMessage({
-        type: 'generate',
-        requestId,
-        chunk: {
-          cx: chunkData.cx,
-          cy: chunkData.cy,
-          cz: chunkData.cz,
-          blocksArray: chunkData.blocksArray
-        },
-        neighborChunks
-      });
+      processed += batchSize;
 
-      console.log(`[VoxelWorld] Requested mesh generation for chunk ${key}`);
-    });
-
-    // Clean up old meshes for chunks that no longer exist
-    setGeneratedMeshes(prev => {
-      const next = new Map(prev);
-      for (const key of next.keys()) {
-        if (!chunks.has(key)) {
-          console.log(`[VoxelWorld] Removing mesh for unloaded chunk ${key}`);
-          next.delete(key);
+      if (processed < chunkKeys.length) {
+        // Process next batch on next frame
+        requestAnimationFrame(processBatch);
+      } else {
+        // Update stats when done
+        if (renderer) {
+          const stats = renderer.getStats();
+          setStats(stats);
+          console.log(`📊 [VoxelWorld] Rendering complete: ${stats.chunksLoaded} chunks, ${stats.totalVertices} vertices, ${stats.totalTriangles} triangles`);
         }
       }
-      return next;
-    });
-  }, [chunks, texturesLoaded, generatedMeshes]);
+    };
 
-  if (!texturesLoaded) {
-    return null;
+    processBatch();
+
+  }, [chunks, isAtlasReady]);
+
+  // Expose renderer for debugging (can be removed in production)
+  useEffect(() => {
+    if (chunkRendererRef.current && typeof window !== 'undefined') {
+      (window as any).__voxelRenderer = chunkRendererRef.current;
+      console.log('🔍 [VoxelWorld] Renderer exposed on window.__voxelRenderer for debugging');
+    }
+  }, [isAtlasReady]);
+
+  // Update stats periodically
+  useFrame(() => {
+    if (chunkRendererRef.current) {
+      // Update stats every 60 frames (~1 second at 60fps)
+      if (Math.random() < 0.016) {
+        const newStats = chunkRendererRef.current.getStats();
+        setStats(newStats);
+        if (onStatsUpdate) {
+          onStatsUpdate(newStats);
+        }
+      }
+    }
+  });
+
+  // Render loading state
+  if (!isAtlasReady) {
+    return (
+      <group>
+        <mesh position={[0, 0, 0]}>
+          <boxGeometry args={[1, 1, 1]} />
+          <meshStandardMaterial color="#888888" />
+        </mesh>
+      </group>
+    );
   }
 
-  console.log(`[VoxelWorld] Rendering ${generatedMeshes.size}/${chunks.size} chunks`);
-
   return (
     <>
-      {Array.from(generatedMeshes.entries()).map(([key, meshes]) => (
-        <VoxelChunkMeshes key={key} chunkKey={key} meshes={meshes} />
-      ))}
-    </>
-  );
-}
-
-interface VoxelChunkMeshesProps {
-  chunkKey: string;
-  meshes: MeshData[];
-}
-
-function VoxelChunkMeshes({ chunkKey, meshes }: VoxelChunkMeshesProps) {
-  return (
-    <>
-      {meshes.map((meshData, index) => {
-        // Create geometry from worker data
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.BufferAttribute(meshData.positions, 3));
-        geometry.setAttribute('normal', new THREE.BufferAttribute(meshData.normals, 3));
-        geometry.setAttribute('uv', new THREE.BufferAttribute(meshData.uvs, 2));
-        geometry.setIndex(new THREE.BufferAttribute(meshData.indices, 1));
-
-        // Get material for this block type
-        const material = textureAtlas.getMaterialForBlock(meshData.blockType);
-
-        return (
-          <mesh
-            key={`${chunkKey}-${meshData.blockType}-${index}`}
-            geometry={geometry}
-            material={material}
-            castShadow
-            receiveShadow
-          />
-        );
-      })}
+      <group ref={groupRef} />
+      
+      {/* Debug stats (optional - can be removed) */}
+      {stats.chunksLoaded > 0 && (
+        <mesh position={[0, 100, 0]} visible={false}>
+          <boxGeometry args={[0.1, 0.1, 0.1]} />
+          <meshBasicMaterial color="#00ff00" />
+        </mesh>
+      )}
     </>
   );
 }

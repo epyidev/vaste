@@ -20,7 +20,7 @@ const RENDER_DISTANCE = 4; // chunks
 
 export function PlayerController({ controlsRef, spawnPoint, networkManager }: PlayerControllerProps) {
   const velocity = useRef(new THREE.Vector3(0, 0, 0));
-  const position = useRef(new THREE.Vector3(spawnPoint.x, spawnPoint.y, spawnPoint.z));
+  const position = useRef(new THREE.Vector3(spawnPoint.x, spawnPoint.y + PLAYER_HEIGHT, spawnPoint.z));
   const keys = useRef<Record<string, boolean>>({});
   const onGround = useRef(false);
   const lastNetworkUpdate = useRef(0);
@@ -28,7 +28,7 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager }: Pl
   const lastChunkUpdate = useRef(0);
 
   useEffect(() => {
-    position.current.set(spawnPoint.x, spawnPoint.y, spawnPoint.z);
+    position.current.set(spawnPoint.x, spawnPoint.y + PLAYER_HEIGHT, spawnPoint.z);
     
     // Request initial chunks around spawn point
     if (networkManager) {
@@ -150,8 +150,8 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager }: Pl
     position.current.y += velocity.current.y * dt;
     position.current.z += velocity.current.z * dt;
 
-    // Simple ground collision (temporary - will be replaced with proper voxel collision)
-    const groundLevel = spawnPoint.y - PLAYER_HEIGHT + 0.1;
+    // Simple ground collision
+    const groundLevel = spawnPoint.y + PLAYER_HEIGHT;
     if (position.current.y < groundLevel) {
       position.current.y = groundLevel;
       velocity.current.y = 0;
