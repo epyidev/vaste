@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { NetworkManager } from "./network";
 import { VoxelWorld } from "./components/VoxelWorld";
 import { PlayerController } from "./components/PlayerController";
+import LoadingScreen from "./components/ui/LoadingScreen";
 
 interface GameProps {
   serverUrl: string;
@@ -12,15 +13,18 @@ interface GameProps {
 }
 
 export function Game({ serverUrl, user }: GameProps) {
-  const [loading, setLoading] = useState(true);
+  const [loadingState, setLoadingState] = useState<'connecting' | 'loading-world' | 'loading-chunks' | 'ready'>('connecting');
   const [connected, setConnected] = useState(false);
   const [spawnPoint, setSpawnPoint] = useState({ x: 0, y: 50, z: 0 });
   const [chunks, setChunks] = useState<Map<string, any>>(new Map());
   const [playerPos, setPlayerPos] = useState({ x: 0, y: 0, z: 0 });
   const [fps, setFps] = useState(0);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [showLoadingScreen, setShowLoadingScreen] = useState(true); // Control loading screen visibility with fade
   const networkRef = useRef<NetworkManager | null>(null);
   const controlsRef = useRef<any>(null);
   const fpsCounterRef = useRef({ frames: 0, lastTime: performance.now() });
+  const initialChunksLoadedRef = useRef(false);
 
   // FPS Counter
   useEffect(() => {
@@ -53,13 +57,20 @@ export function Game({ serverUrl, user }: GameProps) {
         // Update chunks whenever state changes
         setChunks(new Map(state.chunks));
       },
-      (isConnected) => setConnected(isConnected)
+      (isConnected) => {
+        setConnected(isConnected);
+        if (isConnected) {
+          setLoadingState('loading-world');
+          setLoadingProgress(30);
+        }
+      }
     );
     
     network.setAuthenticatedUser(user);
     network.setOnWorldAssigned((spawn) => {
       setSpawnPoint(spawn);
-      setLoading(false);
+      setLoadingState('loading-chunks');
+      setLoadingProgress(60);
     });
     
     networkRef.current = network;
@@ -68,30 +79,88 @@ export function Game({ serverUrl, user }: GameProps) {
     return () => network.disconnect();
   }, [serverUrl, user]);
 
-  if (loading) {
-    return (
-      <div style={{
-        position: "fixed",
-        width: "100vw",
-        height: "100vh",
-        background: "linear-gradient(to bottom, #1a1a2e 0%, #0f0f1e 100%)",
-        color: "#fff",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        fontFamily: "Arial, sans-serif"
-      }}>
-        <div style={{ fontSize: "32px", marginBottom: "20px" }}>Vaste</div>
-        <div style={{ fontSize: "18px", opacity: 0.7 }}>
-          {connected ? "Loading world..." : "Connecting to server..."}
-        </div>
-      </div>
-    );
-  }
+  // Check if initial chunks around spawn are loaded (just enough to not fall)
+  useEffect(() => {
+    if (loadingState !== 'loading-chunks' || initialChunksLoadedRef.current) return;
+
+    const CHUNK_SIZE = 16;
+    const HORIZONTAL_RADIUS = 1; // Just 1 chunk around spawn horizontally
+    
+    const spawnChunkX = Math.floor(spawnPoint.x / CHUNK_SIZE);
+    const spawnChunkY = Math.floor(spawnPoint.y / CHUNK_SIZE);
+    const spawnChunkZ = Math.floor(spawnPoint.z / CHUNK_SIZE);
+    
+    let requiredChunks = 0;
+    let loadedChunks = 0;
+    
+    // Count required chunks (only horizontal plane, not above/below)
+    for (let cx = spawnChunkX - HORIZONTAL_RADIUS; cx <= spawnChunkX + HORIZONTAL_RADIUS; cx++) {
+      for (let cz = spawnChunkZ - HORIZONTAL_RADIUS; cz <= spawnChunkZ + HORIZONTAL_RADIUS; cz++) {
+        requiredChunks++;
+        const key = `${cx},${spawnChunkY},${cz}`;
+        if (chunks.has(key)) {
+          loadedChunks++;
+        }
+      }
+    }
+    
+    // Update progress
+    const chunkProgress = (loadedChunks / requiredChunks) * 40; // 40% of total progress
+    setLoadingProgress(60 + chunkProgress);
+    
+    // If spawn chunk is loaded, we're good to go (player won't fall)
+    if (loadedChunks >= 1) { // Just need at least the spawn chunk
+      initialChunksLoadedRef.current = true;
+      setLoadingProgress(100);
+      // Start fade out after a brief moment
+      setTimeout(() => {
+        setLoadingState('ready');
+        // Fade out loading screen smoothly
+        setTimeout(() => {
+          setShowLoadingScreen(false);
+        }, 600); // Wait for fade animation
+      }, 200);
+    }
+  }, [chunks, loadingState, spawnPoint]);
+
+  // Get loading message based on state
+  const getLoadingMessage = () => {
+    switch (loadingState) {
+      case 'connecting':
+        return 'Connecting to server...';
+      case 'loading-world':
+        return 'Loading world data...';
+      case 'loading-chunks':
+        return 'Loading terrain...';
+      default:
+        return 'Loading...';
+    }
+  };
 
   return (
     <div style={{ position: "fixed", width: "100vw", height: "100vh" }}>
+      {/* Loading Screen with fade out */}
+      {showLoadingScreen && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 1000,
+          opacity: loadingState === 'ready' ? 0 : 1,
+          transition: 'opacity 0.6s ease-out',
+          pointerEvents: loadingState === 'ready' ? 'none' : 'auto'
+        }}>
+          <LoadingScreen
+            message={getLoadingMessage()}
+            progress={loadingProgress}
+            showProgress={true}
+          />
+        </div>
+      )}
+
+      {/* Game Canvas */}
       <Canvas
         camera={{
           position: [spawnPoint.x, spawnPoint.y + 1.8, spawnPoint.z],

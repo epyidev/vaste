@@ -20,7 +20,7 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: overlay ? 'rgba(0, 0, 0, 0.9)' : '#0a0a0a',
+    background: '#000000',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -29,53 +29,59 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({
     gap: '24px',
   };
 
+  const titleStyles: React.CSSProperties = {
+    fontSize: '48px',
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: '32px',
+    letterSpacing: '4px',
+  };
+
   const contentStyles: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '16px',
-    padding: '32px',
-    backgroundColor: '#111',
-    borderRadius: '12px',
-    border: '1px solid #333',
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
+    gap: '20px',
   };
 
   const messageStyles: React.CSSProperties = {
-    color: '#ffffff',
+    color: '#cccccc',
     fontSize: '16px',
-    fontWeight: '500',
+    fontWeight: '400',
     textAlign: 'center',
     margin: 0,
   };
 
   const progressBarStyles: React.CSSProperties = {
-    width: '200px',
+    width: '300px',
     height: '4px',
-    backgroundColor: '#333',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: '2px',
     overflow: 'hidden',
-    marginTop: '8px',
+    marginTop: '12px',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
   };
 
   const progressFillStyles: React.CSSProperties = {
     height: '100%',
-    backgroundColor: '#555',
+    background: '#ffffff',
     borderRadius: '2px',
-    transition: 'width 0.3s ease-in-out',
+    transition: 'width 0.4s ease-out',
     width: `${Math.min(Math.max(progress || 0, 0), 100)}%`,
   };
 
   const progressTextStyles: React.CSSProperties = {
-    color: '#999',
-    fontSize: '14px',
-    marginTop: '4px',
+    color: '#888888',
+    fontSize: '13px',
+    marginTop: '8px',
+    fontWeight: '400',
   };
 
   return (
     <div style={containerStyles}>
+      <div style={titleStyles}>VASTE</div>
       <div style={contentStyles}>
-        <Spinner size="large" color="#ffffff" />
+        <Spinner size="large" color="#ffffff" thickness={3} />
         <p style={messageStyles}>{message}</p>
         
         {showProgress && typeof progress === 'number' && (
