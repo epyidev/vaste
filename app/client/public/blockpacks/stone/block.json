@@ -1,0 +1,4 @@
+{
+  "name": "stone",
+  "textures": { "all": "/blockpacks/stone/textures/stone.png" }
+}
