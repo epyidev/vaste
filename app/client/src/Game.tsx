@@ -56,6 +56,19 @@ export function Game({ serverUrl, user }: GameProps) {
     return () => cancelAnimationFrame(frameId);
   }, []);
 
+  // Handle window focus/blur to prevent camera jumps
+  useEffect(() => {
+    const handleBlur = () => {
+      // When window loses focus, unlock pointer to prevent accumulated movements
+      if (controlsRef.current && isPointerLocked) {
+        controlsRef.current.unlock();
+      }
+    };
+
+    window.addEventListener('blur', handleBlur);
+    return () => window.removeEventListener('blur', handleBlur);
+  }, [isPointerLocked]);
+
   useEffect(() => {
     const network = new NetworkManager(
       (state) => {
@@ -128,8 +141,15 @@ export function Game({ serverUrl, user }: GameProps) {
     }
   }, [chunks, loadingState, spawnPoint]);
 
-  // Track pointer lock state
+  // Track pointer lock state and smooth mouse movements
   useEffect(() => {
+    let ignoreNextMovement = false;
+    let movementTimeout: number;
+    const movementHistory: { x: number; y: number; time: number }[] = [];
+    const MAX_HISTORY = 3; // Keep last 3 movements for smoothing
+    const MAX_MOVEMENT = 30; // Maximum pixels per movement to prevent spikes
+    let lastMovementTime = 0;
+
     const handleLockChange = () => {
       const locked = document.pointerLockElement !== null;
       setIsPointerLocked(locked);
@@ -140,10 +160,76 @@ export function Game({ serverUrl, user }: GameProps) {
           controlsRef.current.unlock();
         }
       }
+
+      // When locking, clear history and ignore first movement
+      if (locked) {
+        ignoreNextMovement = true;
+        movementHistory.length = 0;
+        lastMovementTime = performance.now();
+        clearTimeout(movementTimeout);
+        movementTimeout = setTimeout(() => {
+          ignoreNextMovement = false;
+        }, 50);
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!document.pointerLockElement) return;
+
+      const now = performance.now();
+      const timeDelta = now - lastMovementTime;
+
+      // Ignore first movement after lock
+      if (ignoreNextMovement) {
+        e.stopImmediatePropagation();
+        ignoreNextMovement = false;
+        lastMovementTime = now;
+        return;
+      }
+
+      // Ignore movements after long pauses (tab switch, etc.)
+      if (timeDelta > 200) {
+        lastMovementTime = now;
+        movementHistory.length = 0;
+        return;
+      }
+
+      const movementX = e.movementX || 0;
+      const movementY = e.movementY || 0;
+
+      // Clamp extreme movements
+      const clampedX = Math.max(-MAX_MOVEMENT, Math.min(MAX_MOVEMENT, movementX));
+      const clampedY = Math.max(-MAX_MOVEMENT, Math.min(MAX_MOVEMENT, movementY));
+
+      // Detect spikes (movement much larger than recent average)
+      if (movementHistory.length > 0) {
+        const avgX = movementHistory.reduce((sum, m) => sum + Math.abs(m.x), 0) / movementHistory.length;
+        const avgY = movementHistory.reduce((sum, m) => sum + Math.abs(m.y), 0) / movementHistory.length;
+        
+        // If movement is 3x larger than average, it's likely a spike
+        if (Math.abs(clampedX) > avgX * 3 || Math.abs(clampedY) > avgY * 3) {
+          lastMovementTime = now;
+          return; // Ignore this spike
+        }
+      }
+
+      // Add to history
+      movementHistory.push({ x: clampedX, y: clampedY, time: now });
+      if (movementHistory.length > MAX_HISTORY) {
+        movementHistory.shift();
+      }
+
+      lastMovementTime = now;
     };
 
     document.addEventListener('pointerlockchange', handleLockChange);
-    return () => document.removeEventListener('pointerlockchange', handleLockChange);
+    document.addEventListener('mousemove', handleMouseMove, { capture: true });
+    
+    return () => {
+      document.removeEventListener('pointerlockchange', handleLockChange);
+      document.removeEventListener('mousemove', handleMouseMove, { capture: true });
+      clearTimeout(movementTimeout);
+    };
   }, [isPaused]);
 
   // Block browser shortcuts when pointer is locked (playing)
