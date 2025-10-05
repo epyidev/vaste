@@ -58,13 +58,12 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager, onPo
 
     console.log(`[PlayerController] Player chunk: (${playerChunkX}, ${playerChunkY}, ${playerChunkZ})`);
 
-    let requestCount = 0;
+    // Generate all chunk positions within render distance
+    const chunksToRequest: Array<{ cx: number; cy: number; cz: number; distance: number }> = [];
 
-    // Request chunks in a cube around the player
     for (let cx = playerChunkX - renderDistance; cx <= playerChunkX + renderDistance; cx++) {
       for (let cy = playerChunkY - renderDistance; cy <= playerChunkY + renderDistance; cy++) {
         for (let cz = playerChunkZ - renderDistance; cz <= playerChunkZ + renderDistance; cz++) {
-          // Only request chunks within render distance
           const dx = cx - playerChunkX;
           const dy = cy - playerChunkY;
           const dz = cz - playerChunkZ;
@@ -73,19 +72,28 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager, onPo
           if (distance <= renderDistance) {
             const chunkKey = `${cx},${cy},${cz}`;
             
-            // Only request if not already requested
+            // Only add if not already requested
             if (!requestedChunks.current.has(chunkKey)) {
-              networkManager.requestChunk(cx, cy, cz);
-              requestedChunks.current.add(chunkKey);
-              requestCount++;
+              chunksToRequest.push({ cx, cy, cz, distance });
             }
           }
         }
       }
     }
 
+    // Sort chunks by distance (closest first) - spiral pattern
+    chunksToRequest.sort((a, b) => a.distance - b.distance);
+
+    // Request chunks in order of proximity
+    let requestCount = 0;
+    for (const chunk of chunksToRequest) {
+      networkManager.requestChunk(chunk.cx, chunk.cy, chunk.cz);
+      requestedChunks.current.add(`${chunk.cx},${chunk.cy},${chunk.cz}`);
+      requestCount++;
+    }
+
     if (requestCount > 0) {
-      console.log(`[PlayerController] Requested ${requestCount} new chunks`);
+      console.log(`[PlayerController] Requested ${requestCount} new chunks (sorted by distance)`);
     }
   };
 
