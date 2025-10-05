@@ -6,6 +6,8 @@ import { NetworkManager } from "./network";
 import { VoxelWorld } from "./components/VoxelWorld";
 import { PlayerController } from "./components/PlayerController";
 import LoadingScreen from "./components/ui/LoadingScreen";
+import { PauseMenu } from "./components/ui/PauseMenu";
+import { useNavigate } from "react-router-dom";
 
 interface GameProps {
   serverUrl: string;
@@ -13,6 +15,7 @@ interface GameProps {
 }
 
 export function Game({ serverUrl, user }: GameProps) {
+  const navigate = useNavigate();
   const [loadingState, setLoadingState] = useState<'connecting' | 'loading-world' | 'loading-chunks' | 'ready'>('connecting');
   const [connected, setConnected] = useState(false);
   const [spawnPoint, setSpawnPoint] = useState({ x: 0, y: 50, z: 0 });
@@ -21,6 +24,8 @@ export function Game({ serverUrl, user }: GameProps) {
   const [fps, setFps] = useState(0);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [showLoadingScreen, setShowLoadingScreen] = useState(true); // Control loading screen visibility with fade
+  const [isPaused, setIsPaused] = useState(false);
+  const [isPointerLocked, setIsPointerLocked] = useState(false);
   const networkRef = useRef<NetworkManager | null>(null);
   const controlsRef = useRef<any>(null);
   const fpsCounterRef = useRef({ frames: 0, lastTime: performance.now() });
@@ -122,6 +127,49 @@ export function Game({ serverUrl, user }: GameProps) {
       }, 200);
     }
   }, [chunks, loadingState, spawnPoint]);
+
+  // Track pointer lock state
+  useEffect(() => {
+    const handleLockChange = () => {
+      const locked = document.pointerLockElement !== null;
+      setIsPointerLocked(locked);
+    };
+
+    document.addEventListener('pointerlockchange', handleLockChange);
+    return () => document.removeEventListener('pointerlockchange', handleLockChange);
+  }, []);
+
+  // Handle ESC key for pause menu
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && loadingState === 'ready' && !isPointerLocked) {
+        // Only show pause menu if pointer is already unlocked
+        e.preventDefault();
+        setIsPaused(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [loadingState, isPointerLocked]);
+
+  // Pause menu handlers
+  const handleResume = () => {
+    setIsPaused(false);
+    // Re-lock the pointer after a small delay
+    setTimeout(() => {
+      if (controlsRef.current) {
+        controlsRef.current.lock();
+      }
+    }, 100);
+  };
+
+  const handleDisconnect = () => {
+    if (networkRef.current) {
+      networkRef.current.disconnect();
+    }
+    navigate('/servers');
+  };
 
   // Get loading message based on state
   const getLoadingMessage = () => {
@@ -229,7 +277,7 @@ export function Game({ serverUrl, user }: GameProps) {
           Position: X: {playerPos.x.toFixed(1)} Y: {playerPos.y.toFixed(1)} Z: {playerPos.z.toFixed(1)}
         </div>
         <div style={{ marginTop: "10px", opacity: 0.7, fontSize: "12px" }}>
-          Press ESC to unlock cursor
+          {isPointerLocked ? 'Press ESC to unlock cursor' : 'Press ESC again for pause menu'}
         </div>
       </div>
 
@@ -247,6 +295,13 @@ export function Game({ serverUrl, user }: GameProps) {
           <circle cx="20" cy="20" r="3" fill="none" stroke="white" strokeWidth="1" opacity="0.5" />
         </svg>
       </div>
+
+      {/* Pause Menu */}
+      <PauseMenu
+        isOpen={isPaused}
+        onResume={handleResume}
+        onDisconnect={handleDisconnect}
+      />
     </div>
   );
 }
