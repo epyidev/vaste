@@ -90,9 +90,12 @@ class FlatworldGenerator {
      * @returns {{x: number, y: number, z: number}}
      */
     getSpawnPoint() {
+        // Spawn at feet level, which is exactly at groundHeight
+        // groundHeight = 44 means blocks go from Y=0 to Y=43
+        // So feet should be at Y=44 (standing on top of Y=43 block)
         return {
             x: 0,
-            y: this.groundHeight + 2, // 2 blocks above ground
+            y: this.groundHeight,
             z: 0
         };
     }
