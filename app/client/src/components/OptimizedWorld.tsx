@@ -180,6 +180,7 @@ export function OptimizedWorld({
         return (
           <mesh
             key={chunkKey}
+            name={`chunk-${chunkKey}`}
             position={[worldPos.x, worldPos.y, worldPos.z]}
             geometry={geometry}
             material={materialRef.current!}

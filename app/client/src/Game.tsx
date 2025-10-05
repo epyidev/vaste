@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { NetworkManager } from "./network";
 import { VoxelWorld } from "./components/VoxelWorld";
 import { PlayerController } from "./components/PlayerController";
+import { BlockSelector } from "./components/BlockSelector";
 import LoadingScreen from "./components/ui/LoadingScreen";
 import { PauseMenu } from "./components/ui/PauseMenu";
 import { SettingsMenu } from "./components/ui/SettingsMenu";
@@ -22,6 +23,7 @@ export function Game({ serverUrl, user }: GameProps) {
   const [spawnPoint, setSpawnPoint] = useState({ x: 0, y: 50, z: 0 });
   const [chunks, setChunks] = useState<Map<string, any>>(new Map());
   const [playerPos, setPlayerPos] = useState({ x: 0, y: 0, z: 0 });
+  const playerPosVector = useRef(new THREE.Vector3(0, 0, 0));
   const [fps, setFps] = useState(0);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [showLoadingScreen, setShowLoadingScreen] = useState(true);
@@ -364,6 +366,11 @@ export function Game({ serverUrl, user }: GameProps) {
     localStorage.setItem('vaste_ambientOcclusion', enabled.toString());
   };
 
+  const handlePlayerPositionChange = (pos: { x: number; y: number; z: number }) => {
+    setPlayerPos(pos);
+    playerPosVector.current.set(pos.x, pos.y, pos.z);
+  };
+
   const handleDisconnect = () => {
     if (networkRef.current) {
       networkRef.current.disconnect();
@@ -434,10 +441,13 @@ export function Game({ serverUrl, user }: GameProps) {
           controlsRef={controlsRef}
           spawnPoint={spawnPoint}
           networkManager={networkRef.current}
-          onPositionChange={setPlayerPos}
+          onPositionChange={handlePlayerPositionChange}
           renderDistance={renderDistance}
           clearRequestedChunks={clearChunks}
         />
+        
+        {/* Block Selection Outline */}
+        <BlockSelector />
         
         {/* Sky */}
         <Sky

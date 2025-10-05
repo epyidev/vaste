@@ -97,6 +97,7 @@ export function VoxelWorld({ chunks, ambientOcclusionEnabled = false }: VoxelWor
 
         if (mesh) {
           mesh.userData.chunkKey = key;
+          mesh.name = `chunk-${key}`; // Add name for BlockSelector
           group.add(mesh);
         }
       }

@@ -4,6 +4,7 @@ import { Block } from "../types";
 // Système de raycasting optimisé pour les chunks
 export class OptimizedRaycaster {
   private raycaster: THREE.Raycaster;
+  private logCounter: number = 0;
 
   constructor() {
     this.raycaster = new THREE.Raycaster();
@@ -11,11 +12,19 @@ export class OptimizedRaycaster {
 
   // Raycast uniquement sur les blocs proches du joueur pour de meilleures performances
   raycastBlocks(camera: THREE.Camera, blocks: Map<string, Block>, playerPosition: THREE.Vector3, maxDistance: number = 10): { blockPos: THREE.Vector3; normal: THREE.Vector3; distance: number } | null {
+    this.logCounter++;
+    
     // Use Amanatides & Woo voxel traversal (grid stepping) for efficient block selection
     const mouse = new THREE.Vector2(0, 0);
     this.raycaster.setFromCamera(mouse, camera);
     const origin = this.raycaster.ray.origin.clone();
     const dir = this.raycaster.ray.direction.clone();
+
+    if (this.logCounter % 60 === 0) {
+      console.log('[OptimizedRaycaster] Raycasting with', blocks.size, 'blocks');
+      console.log('[OptimizedRaycaster] Origin:', origin);
+      console.log('[OptimizedRaycaster] Direction:', dir);
+    }
 
     // If direction is zero, nothing to do
     if (dir.lengthSq() === 0) return null;
