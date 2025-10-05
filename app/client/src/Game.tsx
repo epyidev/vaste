@@ -133,11 +133,47 @@ export function Game({ serverUrl, user }: GameProps) {
     const handleLockChange = () => {
       const locked = document.pointerLockElement !== null;
       setIsPointerLocked(locked);
+      
+      // If pause menu is open and user tries to lock pointer, prevent it
+      if (locked && isPaused) {
+        if (controlsRef.current) {
+          controlsRef.current.unlock();
+        }
+      }
     };
 
     document.addEventListener('pointerlockchange', handleLockChange);
     return () => document.removeEventListener('pointerlockchange', handleLockChange);
-  }, []);
+  }, [isPaused]);
+
+  // Block browser shortcuts when pointer is locked (playing)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Block common browser shortcuts when playing
+      if (isPointerLocked) {
+        // Ctrl/Cmd combinations
+        if (e.ctrlKey || e.metaKey) {
+          const blockedKeys = ['s', 'w', 'n', 't', 'r', 'f', 'h', 'p', 'o', 'g', 'u', 'j', 'd', 'l'];
+          if (blockedKeys.includes(e.key.toLowerCase())) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+        }
+        
+        // F-keys (F1, F3, F5, F11, F12, etc.)
+        if (e.key.startsWith('F') && e.key.length <= 3) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+      }
+    };
+
+    // Capture phase to intercept before other handlers
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+  }, [isPointerLocked]);
 
   // Handle ESC key for pause menu
   useEffect(() => {
@@ -208,10 +244,18 @@ export function Game({ serverUrl, user }: GameProps) {
         </div>
       )}
 
-      {/* Game Canvas */}
-      <Canvas
-        camera={{
-          position: [spawnPoint.x, spawnPoint.y + 1.8, spawnPoint.z],
+      {/* Game Canvas - Wrapper to block interactions when paused */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: isPaused ? 'none' : 'auto',
+      }}>
+        <Canvas
+          camera={{
+            position: [spawnPoint.x, spawnPoint.y + 1.8, spawnPoint.z],
           fov: 75,
           near: 0.1,
           far: 1000
@@ -258,6 +302,7 @@ export function Game({ serverUrl, user }: GameProps) {
         {/* Voxel World */}
         <VoxelWorld chunks={chunks} />
       </Canvas>
+      </div>
 
       {/* HUD */}
       <div style={{
