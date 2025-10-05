@@ -31,7 +31,7 @@ export class TextureAtlasBuilder {
   private loader: TextureLoader;
   private atlasTexture: THREE.Texture | null = null;
   private atlasSize: number = 2048;
-  private padding: number = 1;
+  private padding: number = 2; // 2 pixels of padding between tiles to prevent bleeding
   private rects: AtlasRect[] = [];
 
   constructor(registry: TextureRegistry, loader: TextureLoader, atlasSize: number = 2048) {
@@ -182,8 +182,55 @@ export class TextureAtlasBuilder {
           ctx.fillRect(rect.x + halfW, rect.y + halfH, halfW, halfH);
           console.log(`[TextureAtlasBuilder] Drew FALLBACK for ${img.path} at (${rect.x}, ${rect.y})`);
         } else {
+          // Draw the main texture
           ctx.drawImage(img.image, rect.x, rect.y, rect.width, rect.height);
-          console.log(`[TextureAtlasBuilder] Drawing ${img.path} at (${rect.x}, ${rect.y}) size ${rect.width}x${rect.height}`);
+          
+          // Edge padding: extend edge pixels into padding area to prevent bleeding
+          // This is critical for preventing dark edges on distant blocks
+          if (this.padding > 0) {
+            // Top edge padding
+            ctx.drawImage(img.image, 
+              0, 0, img.width, 1,  // Source: top row
+              rect.x, rect.y - this.padding, rect.width, this.padding  // Dest: above texture
+            );
+            
+            // Bottom edge padding
+            ctx.drawImage(img.image,
+              0, img.height - 1, img.width, 1,  // Source: bottom row
+              rect.x, rect.y + rect.height, rect.width, this.padding  // Dest: below texture
+            );
+            
+            // Left edge padding
+            ctx.drawImage(img.image,
+              0, 0, 1, img.height,  // Source: left column
+              rect.x - this.padding, rect.y, this.padding, rect.height  // Dest: left of texture
+            );
+            
+            // Right edge padding
+            ctx.drawImage(img.image,
+              img.width - 1, 0, 1, img.height,  // Source: right column
+              rect.x + rect.width, rect.y, this.padding, rect.height  // Dest: right of texture
+            );
+            
+            // Corner padding (fill with corner pixels)
+            // Top-left
+            ctx.fillStyle = this.getPixelColor(img.image, 0, 0);
+            ctx.fillRect(rect.x - this.padding, rect.y - this.padding, this.padding, this.padding);
+            
+            // Top-right
+            ctx.fillStyle = this.getPixelColor(img.image, img.width - 1, 0);
+            ctx.fillRect(rect.x + rect.width, rect.y - this.padding, this.padding, this.padding);
+            
+            // Bottom-left
+            ctx.fillStyle = this.getPixelColor(img.image, 0, img.height - 1);
+            ctx.fillRect(rect.x - this.padding, rect.y + rect.height, this.padding, this.padding);
+            
+            // Bottom-right
+            ctx.fillStyle = this.getPixelColor(img.image, img.width - 1, img.height - 1);
+            ctx.fillRect(rect.x + rect.width, rect.y + rect.height, this.padding, this.padding);
+          }
+          
+          console.log(`[TextureAtlasBuilder] Drawing ${img.path} at (${rect.x}, ${rect.y}) size ${rect.width}x${rect.height} with edge padding`);
         }
       }
     }
@@ -213,6 +260,25 @@ export class TextureAtlasBuilder {
     this.atlasTexture = texture;
 
     return texture;
+  }
+
+  /**
+   * Get the color of a pixel from an image for edge padding
+   */
+  private getPixelColor(image: HTMLImageElement, x: number, y: number): string {
+    try {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = image.width;
+      tempCanvas.height = image.height;
+      const tempCtx = tempCanvas.getContext('2d')!;
+      tempCtx.drawImage(image, 0, 0);
+      
+      const pixel = tempCtx.getImageData(x, y, 1, 1).data;
+      return `rgba(${pixel[0]}, ${pixel[1]}, ${pixel[2]}, ${pixel[3] / 255})`;
+    } catch (e) {
+      // If we can't read the pixel (CORS issue), return a neutral color
+      return '#808080';
+    }
   }
 
   private updateRegistry(): void {
@@ -251,16 +317,21 @@ export class TextureAtlasBuilder {
       return [0, 0, 1, 1];
     }
 
+    // Add a larger inset to prevent texture bleeding between atlas tiles
+    // This is especially important for distant blocks where precision decreases
+    // 1.0 pixel inset is recommended for voxel textures with atlases
+    const inset = 1.0; // One full pixel inset in texture space
+    
     // No V-flip needed - we'll handle orientation in vertex order
-    const u0 = texture.atlasX / this.atlasSize;
-    const v0 = texture.atlasY / this.atlasSize;
-    const u1 = (texture.atlasX + texture.width) / this.atlasSize;
-    const v1 = (texture.atlasY + texture.height) / this.atlasSize;
+    const u0 = (texture.atlasX + inset) / this.atlasSize;
+    const v0 = (texture.atlasY + inset) / this.atlasSize;
+    const u1 = (texture.atlasX + texture.width - inset) / this.atlasSize;
+    const v1 = (texture.atlasY + texture.height - inset) / this.atlasSize;
 
     if (!this.hasLoggedUVCalc) {
       console.log(`[TextureAtlasBuilder] UV calc for ${texturePath}:`);
       console.log(`  atlasPos=(${texture.atlasX}, ${texture.atlasY}), size=${texture.width}x${texture.height}, atlasSize=${this.atlasSize}`);
-      console.log(`  UVs: u0=${u0}, v0=${v0}, u1=${u1}, v1=${v1}`);
+      console.log(`  UVs with ${inset}px inset: u0=${u0}, v0=${v0}, u1=${u1}, v1=${v1}`);
       this.hasLoggedUVCalc = true;
     }
 
