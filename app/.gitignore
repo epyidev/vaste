@@ -77,7 +77,3 @@ typings/
 
 # Uploads
 uploads/
-
-# Database
-*.sql
-*.db
