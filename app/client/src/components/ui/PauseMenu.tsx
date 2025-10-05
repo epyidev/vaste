@@ -4,12 +4,14 @@ interface PauseMenuProps {
   isOpen: boolean;
   onResume: () => void;
   onDisconnect: () => void;
+  onOpenSettings: () => void;
 }
 
 export const PauseMenu: React.FC<PauseMenuProps> = ({
   isOpen,
   onResume,
   onDisconnect,
+  onOpenSettings,
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
@@ -113,6 +115,18 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
           }}
         >
           BACK TO GAME
+        </button>
+        <button
+          style={secondaryButtonStyles}
+          onClick={onOpenSettings}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent';
+          }}
+        >
+          SETTINGS
         </button>
         <button
           style={secondaryButtonStyles}

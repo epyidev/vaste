@@ -8,6 +8,8 @@ interface PlayerControllerProps {
   spawnPoint: { x: number; y: number; z: number };
   networkManager: NetworkManager | null;
   onPositionChange?: (pos: { x: number; y: number; z: number }) => void;
+  renderDistance?: number;
+  clearRequestedChunks?: boolean;
 }
 
 const MOVE_SPEED = 4.317; // Walking speed
@@ -17,9 +19,8 @@ const GRAVITY = 25;
 const PLAYER_HEIGHT = 1.8;
 const PLAYER_RADIUS = 0.3;
 const CHUNK_SIZE = 16;
-const RENDER_DISTANCE = 4; // chunks
 
-export function PlayerController({ controlsRef, spawnPoint, networkManager, onPositionChange }: PlayerControllerProps) {
+export function PlayerController({ controlsRef, spawnPoint, networkManager, onPositionChange, renderDistance = 4, clearRequestedChunks }: PlayerControllerProps) {
   const velocity = useRef(new THREE.Vector3(0, 0, 0));
   const position = useRef(new THREE.Vector3(spawnPoint.x, spawnPoint.y + PLAYER_HEIGHT, spawnPoint.z));
   const keys = useRef<Record<string, boolean>>({});
@@ -39,6 +40,14 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager, onPo
     }
   }, [spawnPoint, networkManager]);
 
+  // Clear requested chunks when requested
+  useEffect(() => {
+    if (clearRequestedChunks) {
+      console.log('[PlayerController] Clearing requested chunks');
+      requestedChunks.current.clear();
+    }
+  }, [clearRequestedChunks]);
+
   // Request chunks around player position
   const requestChunksAroundPlayer = (x: number, y: number, z: number) => {
     if (!networkManager) return;
@@ -52,16 +61,16 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager, onPo
     let requestCount = 0;
 
     // Request chunks in a cube around the player
-    for (let cx = playerChunkX - RENDER_DISTANCE; cx <= playerChunkX + RENDER_DISTANCE; cx++) {
-      for (let cy = playerChunkY - RENDER_DISTANCE; cy <= playerChunkY + RENDER_DISTANCE; cy++) {
-        for (let cz = playerChunkZ - RENDER_DISTANCE; cz <= playerChunkZ + RENDER_DISTANCE; cz++) {
+    for (let cx = playerChunkX - renderDistance; cx <= playerChunkX + renderDistance; cx++) {
+      for (let cy = playerChunkY - renderDistance; cy <= playerChunkY + renderDistance; cy++) {
+        for (let cz = playerChunkZ - renderDistance; cz <= playerChunkZ + renderDistance; cz++) {
           // Only request chunks within render distance
           const dx = cx - playerChunkX;
           const dy = cy - playerChunkY;
           const dz = cz - playerChunkZ;
           const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
           
-          if (distance <= RENDER_DISTANCE) {
+          if (distance <= renderDistance) {
             const chunkKey = `${cx},${cy},${cz}`;
             
             // Only request if not already requested

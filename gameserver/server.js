@@ -440,14 +440,20 @@ class GameServer {
     log(`Sent block mapping table to ${user.username}: ${mappingTable.length} blocks`);
 
     // Send world assignment message
+    const maxRenderDistance = SERVER_CONFIG.maxRenderDistance || 7;
+    const forceRenderDistance = SERVER_CONFIG.forceRenderDistance === true;
+    
     const worldAssignMsg = ChunkProtocol.createWorldAssignMessage({
       worldId: 'main',
       spawnPoint: { x: player.x, y: player.y, z: player.z },
-      generatorType: player.world.generatorType
+      generatorType: player.world.generatorType,
+      maxRenderDistance: maxRenderDistance,
+      forceRenderDistance: forceRenderDistance
     });
     
     ws.send(worldAssignMsg);
-    log(`Sent world assignment to ${user.username}: spawn at (${player.x}, ${player.y}, ${player.z})`);
+    log(`Sent world assignment to ${user.username}: spawn at (${player.x}, ${player.y}, ${player.z}), max render distance: ${maxRenderDistance}${forceRenderDistance ? ', forced to max' : ''}`);
+
 
     // Send nearby chunks
     await this.sendNearbyChunks(user.id);
@@ -644,6 +650,22 @@ class GameServer {
     }
 
     const { cx, cy, cz } = message;
+
+    // Validate render distance (don't trust client)
+    const maxRenderDistance = SERVER_CONFIG.maxRenderDistance || 7;
+    const playerChunkX = Math.floor(player.x / CHUNK_SIZE);
+    const playerChunkY = Math.floor(player.y / CHUNK_SIZE);
+    const playerChunkZ = Math.floor(player.z / CHUNK_SIZE);
+    
+    const dx = cx - playerChunkX;
+    const dy = cy - playerChunkY;
+    const dz = cz - playerChunkZ;
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    
+    if (distance > maxRenderDistance) {
+      log(`Rejected chunk request from ${player.username}: (${cx}, ${cy}, ${cz}) - distance ${distance.toFixed(1)} exceeds max ${maxRenderDistance}`, "WARN");
+      return;
+    }
 
     try {
       log(`Chunk request from ${player.username}: (${cx}, ${cy}, ${cz})`, "DEBUG");

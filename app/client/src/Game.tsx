@@ -7,6 +7,7 @@ import { VoxelWorld } from "./components/VoxelWorld";
 import { PlayerController } from "./components/PlayerController";
 import LoadingScreen from "./components/ui/LoadingScreen";
 import { PauseMenu } from "./components/ui/PauseMenu";
+import { SettingsMenu } from "./components/ui/SettingsMenu";
 import { useNavigate } from "react-router-dom";
 
 interface GameProps {
@@ -23,9 +24,17 @@ export function Game({ serverUrl, user }: GameProps) {
   const [playerPos, setPlayerPos] = useState({ x: 0, y: 0, z: 0 });
   const [fps, setFps] = useState(0);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [showLoadingScreen, setShowLoadingScreen] = useState(true); // Control loading screen visibility with fade
+  const [showLoadingScreen, setShowLoadingScreen] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPointerLocked, setIsPointerLocked] = useState(false);
+  const [renderDistance, setRenderDistance] = useState(() => {
+    const saved = localStorage.getItem('vaste_renderDistance');
+    return saved ? parseInt(saved) : 4;
+  });
+  const [maxRenderDistance, setMaxRenderDistance] = useState(7);
+  const [forceRenderDistance, setForceRenderDistance] = useState<boolean>(false);
+  const [clearChunks, setClearChunks] = useState(false);
   const networkRef = useRef<NetworkManager | null>(null);
   const controlsRef = useRef<any>(null);
   const fpsCounterRef = useRef({ frames: 0, lastTime: performance.now() });
@@ -85,8 +94,25 @@ export function Game({ serverUrl, user }: GameProps) {
     );
     
     network.setAuthenticatedUser(user);
-    network.setOnWorldAssigned((spawn) => {
+    network.setOnWorldAssigned((spawn, serverSettings) => {
       setSpawnPoint(spawn);
+      
+      // Apply server render distance settings
+      if (serverSettings?.maxRenderDistance !== undefined) {
+        setMaxRenderDistance(serverSettings.maxRenderDistance);
+      }
+      if (serverSettings?.forceRenderDistance === true) {
+        setForceRenderDistance(true);
+        setRenderDistance(serverSettings.maxRenderDistance || 7);
+        localStorage.setItem('vaste_renderDistance', (serverSettings.maxRenderDistance || 7).toString());
+      } else {
+        // Clamp client render distance to server max
+        const currentRenderDistance = parseInt(localStorage.getItem('vaste_renderDistance') || '4');
+        const clampedRenderDistance = Math.min(currentRenderDistance, serverSettings?.maxRenderDistance || 7);
+        setRenderDistance(clampedRenderDistance);
+        localStorage.setItem('vaste_renderDistance', clampedRenderDistance.toString());
+      }
+      
       setLoadingState('loading-chunks');
       setLoadingProgress(60);
     });
@@ -154,8 +180,8 @@ export function Game({ serverUrl, user }: GameProps) {
       const locked = document.pointerLockElement !== null;
       setIsPointerLocked(locked);
       
-      // If pause menu is open and user tries to lock pointer, prevent it
-      if (locked && isPaused) {
+      // If pause menu or settings menu is open and user tries to lock pointer, prevent it
+      if (locked && (isPaused || isSettingsOpen)) {
         if (controlsRef.current) {
           controlsRef.current.unlock();
         }
@@ -230,7 +256,7 @@ export function Game({ serverUrl, user }: GameProps) {
       document.removeEventListener('mousemove', handleMouseMove, { capture: true });
       clearTimeout(movementTimeout);
     };
-  }, [isPaused]);
+  }, [isPaused, isSettingsOpen]);
 
   // Block browser shortcuts when pointer is locked (playing)
   useEffect(() => {
@@ -261,19 +287,29 @@ export function Game({ serverUrl, user }: GameProps) {
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [isPointerLocked]);
 
-  // Handle ESC key for pause menu
+  // Handle ESC key for pause menu and settings
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && loadingState === 'ready' && !isPointerLocked) {
-        // Only show pause menu if pointer is already unlocked
+      if (e.key === 'Escape' && loadingState === 'ready') {
         e.preventDefault();
-        setIsPaused(prev => !prev);
+        
+        // Close settings if open
+        if (isSettingsOpen) {
+          setIsSettingsOpen(false);
+          setIsPaused(true);
+          return;
+        }
+        
+        // Toggle pause menu if pointer is unlocked
+        if (!isPointerLocked) {
+          setIsPaused(prev => !prev);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [loadingState, isPointerLocked]);
+  }, [loadingState, isPointerLocked, isSettingsOpen]);
 
   // Pause menu handlers
   const handleResume = () => {
@@ -284,6 +320,34 @@ export function Game({ serverUrl, user }: GameProps) {
         controlsRef.current.lock();
       }
     }, 100);
+  };
+
+  const handleOpenSettings = () => {
+    setIsPaused(false);
+    setIsSettingsOpen(true);
+  };
+
+  const handleCloseSettings = () => {
+    setIsSettingsOpen(false);
+    setIsPaused(true);
+  };
+
+  const handleRenderDistanceChange = (newDistance: number) => {
+    if (forceRenderDistance === true) {
+      // Can't change if forced by server
+      return;
+    }
+    const clampedDistance = Math.min(newDistance, maxRenderDistance);
+    setRenderDistance(clampedDistance);
+    localStorage.setItem('vaste_renderDistance', clampedDistance.toString());
+    
+    // Clear chunks to force reload with new render distance
+    if (networkRef.current) {
+      networkRef.current.clearChunks();
+    }
+    setChunks(new Map());
+    setClearChunks(true);
+    setTimeout(() => setClearChunks(false), 100);
   };
 
   const handleDisconnect = () => {
@@ -357,6 +421,8 @@ export function Game({ serverUrl, user }: GameProps) {
           spawnPoint={spawnPoint}
           networkManager={networkRef.current}
           onPositionChange={setPlayerPos}
+          renderDistance={renderDistance}
+          clearRequestedChunks={clearChunks}
         />
         
         {/* Sky */}
@@ -429,9 +495,19 @@ export function Game({ serverUrl, user }: GameProps) {
 
       {/* Pause Menu */}
       <PauseMenu
-        isOpen={isPaused}
+        isOpen={isPaused && !isSettingsOpen}
         onResume={handleResume}
         onDisconnect={handleDisconnect}
+        onOpenSettings={handleOpenSettings}
+      />
+
+      {/* Settings Menu */}
+      <SettingsMenu
+        isOpen={isSettingsOpen}
+        onClose={handleCloseSettings}
+        currentRenderDistance={renderDistance}
+        maxRenderDistance={maxRenderDistance}
+        onRenderDistanceChange={handleRenderDistanceChange}
       />
     </div>
   );

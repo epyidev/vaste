@@ -50,7 +50,10 @@ export class NetworkManager {
   private gameState: GameState;
   private onStateUpdate: (state: GameState) => void;
   private onConnectionChange: (connected: boolean) => void;
-  private onWorldAssigned?: (spawnPoint: { x: number; y: number; z: number }) => void;
+  private onWorldAssigned?: (
+    spawnPoint: { x: number; y: number; z: number },
+    serverSettings?: { maxRenderDistance?: number; forceRenderDistance?: boolean }
+  ) => void;
   
   private authenticatedUser: any = null;
 
@@ -402,13 +405,23 @@ export class NetworkManager {
   private handleWorldAssign(message: any) {
     logger.info(`[Network] World assigned: ${message.generatorType}`);
     logger.info(`[Network] Spawn point: (${message.spawnPoint.x}, ${message.spawnPoint.y}, ${message.spawnPoint.z})`);
+    
+    if (message.maxRenderDistance !== undefined) {
+      logger.info(`[Network] Server max render distance: ${message.maxRenderDistance}`);
+    }
+    if (message.forceRenderDistance === true) {
+      logger.info(`[Network] Server forcing render distance to maximum`);
+    }
 
     this.gameState.worldAssigned = true;
     this.gameState.spawnPoint = message.spawnPoint;
     this.gameState.generatorType = message.generatorType;
 
     if (this.onWorldAssigned) {
-      this.onWorldAssigned(message.spawnPoint);
+      this.onWorldAssigned(message.spawnPoint, {
+        maxRenderDistance: message.maxRenderDistance,
+        forceRenderDistance: message.forceRenderDistance
+      });
     }
 
     this.onStateUpdate(this.gameState);
@@ -536,9 +549,22 @@ export class NetworkManager {
   }
 
   /**
+   * Clear all chunks from local cache
+   */
+  clearChunks() {
+    logger.info('[Network] Clearing all chunks');
+    this.gameState.chunks.clear();
+    this.onStateUpdate(this.gameState);
+  }
+
+
+  /**
    * Set world assigned callback
    */
-  setOnWorldAssigned(callback: (spawnPoint: { x: number; y: number; z: number }) => void) {
+  setOnWorldAssigned(callback: (
+    spawnPoint: { x: number; y: number; z: number },
+    serverSettings?: { maxRenderDistance?: number; forceRenderDistance?: boolean }
+  ) => void) {
     this.onWorldAssigned = callback;
   }
 
