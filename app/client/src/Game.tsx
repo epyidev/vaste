@@ -16,8 +16,36 @@ export function Game({ serverUrl, user }: GameProps) {
   const [connected, setConnected] = useState(false);
   const [spawnPoint, setSpawnPoint] = useState({ x: 0, y: 50, z: 0 });
   const [chunks, setChunks] = useState<Map<string, any>>(new Map());
+  const [playerPos, setPlayerPos] = useState({ x: 0, y: 0, z: 0 });
+  const [fps, setFps] = useState(0);
   const networkRef = useRef<NetworkManager | null>(null);
   const controlsRef = useRef<any>(null);
+  const fpsCounterRef = useRef({ frames: 0, lastTime: performance.now() });
+
+  // FPS Counter
+  useEffect(() => {
+    let frameId: number;
+    
+    const updateFps = () => {
+      const counter = fpsCounterRef.current;
+      counter.frames++;
+      
+      const currentTime = performance.now();
+      const elapsed = currentTime - counter.lastTime;
+      
+      if (elapsed >= 1000) { // Update every second
+        setFps(Math.round((counter.frames * 1000) / elapsed));
+        counter.frames = 0;
+        counter.lastTime = currentTime;
+      }
+      
+      frameId = requestAnimationFrame(updateFps);
+    };
+    
+    frameId = requestAnimationFrame(updateFps);
+    
+    return () => cancelAnimationFrame(frameId);
+  }, []);
 
   useEffect(() => {
     const network = new NetworkManager(
@@ -81,6 +109,7 @@ export function Game({ serverUrl, user }: GameProps) {
           controlsRef={controlsRef}
           spawnPoint={spawnPoint}
           networkManager={networkRef.current}
+          onPositionChange={setPlayerPos}
         />
         
         {/* Sky */}
@@ -125,8 +154,12 @@ export function Game({ serverUrl, user }: GameProps) {
         userSelect: "none",
         pointerEvents: "none"
       }}>
-        <div>Chunks loaded: {chunks.size}</div>
-        <div style={{ marginTop: "5px", opacity: 0.7 }}>
+        <div style={{ fontSize: "16px", fontWeight: "bold" }}>FPS: {fps}</div>
+        <div style={{ marginTop: "5px" }}>Chunks: {chunks.size}</div>
+        <div style={{ marginTop: "5px" }}>
+          Position: X: {playerPos.x.toFixed(1)} Y: {playerPos.y.toFixed(1)} Z: {playerPos.z.toFixed(1)}
+        </div>
+        <div style={{ marginTop: "10px", opacity: 0.7, fontSize: "12px" }}>
           Press ESC to unlock cursor
         </div>
       </div>

@@ -7,6 +7,7 @@ interface PlayerControllerProps {
   controlsRef: React.RefObject<any>;
   spawnPoint: { x: number; y: number; z: number };
   networkManager: NetworkManager | null;
+  onPositionChange?: (pos: { x: number; y: number; z: number }) => void;
 }
 
 const MOVE_SPEED = 4.317; // Walking speed
@@ -18,7 +19,7 @@ const PLAYER_RADIUS = 0.3;
 const CHUNK_SIZE = 16;
 const RENDER_DISTANCE = 4; // chunks
 
-export function PlayerController({ controlsRef, spawnPoint, networkManager }: PlayerControllerProps) {
+export function PlayerController({ controlsRef, spawnPoint, networkManager, onPositionChange }: PlayerControllerProps) {
   const velocity = useRef(new THREE.Vector3(0, 0, 0));
   const position = useRef(new THREE.Vector3(spawnPoint.x, spawnPoint.y + PLAYER_HEIGHT, spawnPoint.z));
   const keys = useRef<Record<string, boolean>>({});
@@ -26,6 +27,7 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager }: Pl
   const lastNetworkUpdate = useRef(0);
   const requestedChunks = useRef(new Set<string>());
   const lastChunkUpdate = useRef(0);
+  const lastPositionUpdate = useRef(0);
 
   useEffect(() => {
     position.current.set(spawnPoint.x, spawnPoint.y + PLAYER_HEIGHT, spawnPoint.z);
@@ -161,8 +163,18 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager }: Pl
     // Update camera position
     camera.position.copy(position.current);
 
-    // Request chunks as player moves (every 500ms)
+    // Update position for HUD (throttled to ~5 times per second)
     const now = Date.now();
+    if (onPositionChange && now - lastPositionUpdate.current > 200) {
+      onPositionChange({
+        x: position.current.x,
+        y: position.current.y,
+        z: position.current.z
+      });
+      lastPositionUpdate.current = now;
+    }
+
+    // Request chunks as player moves (every 500ms)
     if (networkManager && now - lastChunkUpdate.current > 500) {
       requestChunksAroundPlayer(position.current.x, position.current.y, position.current.z);
       lastChunkUpdate.current = now;
