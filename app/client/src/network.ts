@@ -46,6 +46,7 @@ export class NetworkManager {
   private chunkDecoderWorker: Worker | null = null;
   private pendingDecodes: Map<number, (data: any) => void> = new Map();
   private nextRequestId: number = 1;
+  private pendingChunkRequests: Set<string> = new Set();
   
   private gameState: GameState;
   private onStateUpdate: (state: GameState) => void;
@@ -285,6 +286,15 @@ export class NetworkManager {
    */
   private handleChunkData(chunkData: ChunkData) {
     const chunkKey = `${chunkData.cx},${chunkData.cy},${chunkData.cz}`;
+    
+    // Ignore if not pending (was cancelled)
+    if (!this.pendingChunkRequests.has(chunkKey)) {
+      logger.debug(`[Network] Ignoring cancelled chunk ${chunkKey}`);
+      return;
+    }
+    
+    // Remove from pending requests
+    this.pendingChunkRequests.delete(chunkKey);
     
     // Store chunk
     this.gameState.chunks.set(chunkKey, chunkData);
@@ -539,6 +549,9 @@ export class NetworkManager {
    * Request chunk from server
    */
   requestChunk(cx: number, cy: number, cz: number) {
+    const chunkKey = `${cx},${cy},${cz}`;
+    this.pendingChunkRequests.add(chunkKey);
+    
     logger.debug(`[Network] Requesting chunk (${cx}, ${cy}, ${cz})`);
     this.sendMessage({
       type: "chunk_request",
@@ -555,6 +568,15 @@ export class NetworkManager {
     logger.info('[Network] Clearing all chunks');
     this.gameState.chunks.clear();
     this.onStateUpdate(this.gameState);
+  }
+
+  /**
+   * Cancel all pending chunk requests
+   */
+  cancelPendingChunkRequests() {
+    const count = this.pendingChunkRequests.size;
+    logger.info(`[Network] Cancelling ${count} pending chunk requests`);
+    this.pendingChunkRequests.clear();
   }
 
 

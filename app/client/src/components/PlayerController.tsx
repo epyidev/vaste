@@ -45,8 +45,13 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager, onPo
     if (clearRequestedChunks) {
       console.log('[PlayerController] Clearing requested chunks');
       requestedChunks.current.clear();
+      
+      // Also cancel pending network requests
+      if (networkManager) {
+        networkManager.cancelPendingChunkRequests();
+      }
     }
-  }, [clearRequestedChunks]);
+  }, [clearRequestedChunks, networkManager]);
 
   // Request chunks around player position
   const requestChunksAroundPlayer = (x: number, y: number, z: number) => {
