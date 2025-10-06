@@ -146,10 +146,24 @@ export function PlayerController({
       inputVector.normalize();
     }
 
+    // Get camera's forward direction
     const cameraDirection = new THREE.Vector3();
     camera.getWorldDirection(cameraDirection);
+    
+    // Project onto horizontal plane
     cameraDirection.y = 0;
-    cameraDirection.normalize();
+    
+    // Normalize (will be zero if looking straight up/down)
+    const length = cameraDirection.length();
+    if (length > 0.001) {
+      cameraDirection.normalize();
+    } else {
+      // When looking straight up/down, use camera's rotation around Y axis
+      // Get the camera's world rotation
+      const euler = new THREE.Euler().setFromQuaternion(camera.getWorldQuaternion(new THREE.Quaternion()), 'YXZ');
+      const yaw = euler.y;
+      cameraDirection.set(-Math.sin(yaw), 0, -Math.cos(yaw));
+    }
 
     const cameraRight = new THREE.Vector3();
     cameraRight.crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0));
