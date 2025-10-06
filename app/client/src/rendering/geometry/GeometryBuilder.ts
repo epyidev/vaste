@@ -10,96 +10,132 @@ interface ChunkData {
   blocks: Uint16Array;
 }
 
-interface GeometryData {
-  positions: Float32Array;
-  normals: Float32Array;
-  uvs: Float32Array;
-  indices: Uint32Array;
-}
+/**
+ * Face definitions for a unit cube
+ * Vertices are in counter-clockwise order when viewed from outside
+ */
+const CUBE_FACES = [
+  {
+    name: 'top',
+    direction: [0, 1, 0],
+    vertices: [
+      [0, 1, 1],
+      [1, 1, 1],
+      [1, 1, 0],
+      [0, 1, 0]
+    ],
+    faceIndex: 0
+  },
+  {
+    name: 'bottom',
+    direction: [0, -1, 0],
+    vertices: [
+      [0, 0, 0],
+      [1, 0, 0],
+      [1, 0, 1],
+      [0, 0, 1]
+    ],
+    faceIndex: 1
+  },
+  {
+    name: 'east',
+    direction: [1, 0, 0],
+    vertices: [
+      [1, 0, 1],
+      [1, 0, 0],
+      [1, 1, 0],
+      [1, 1, 1]
+    ],
+    faceIndex: 2
+  },
+  {
+    name: 'west',
+    direction: [-1, 0, 0],
+    vertices: [
+      [0, 0, 0],
+      [0, 0, 1],
+      [0, 1, 1],
+      [0, 1, 0]
+    ],
+    faceIndex: 3
+  },
+  {
+    name: 'south',
+    direction: [0, 0, 1],
+    vertices: [
+      [0, 0, 1],
+      [1, 0, 1],
+      [1, 1, 1],
+      [0, 1, 1]
+    ],
+    faceIndex: 4
+  },
+  {
+    name: 'north',
+    direction: [0, 0, -1],
+    vertices: [
+      [1, 0, 0],
+      [0, 0, 0],
+      [0, 1, 0],
+      [1, 1, 0]
+    ],
+    faceIndex: 5
+  }
+];
 
 export class GeometryBuilder {
-  private static getBlockId(blocks: Uint16Array, x: number, y: number, z: number): number {
+  private static getBlockAt(blocks: Uint16Array, x: number, y: number, z: number): number {
     if (x < 0 || x >= CHUNK_SIZE || y < 0 || y >= CHUNK_SIZE || z < 0 || z >= CHUNK_SIZE) {
       return 0;
     }
-    // Match server indexing: (y * CHUNK_SIZE * CHUNK_SIZE) + (z * CHUNK_SIZE) + x
     const index = (y * CHUNK_SIZE * CHUNK_SIZE) + (z * CHUNK_SIZE) + x;
     return blocks[index] || 0;
   }
-
-  private static shouldRenderFace(blocks: Uint16Array, x: number, y: number, z: number, dx: number, dy: number, dz: number): boolean {
-    return this.getBlockId(blocks, x + dx, y + dy, z + dz) === 0;
-  }
-
-  private static getUVs(blockId: number, faceIndex: number): number[] {
-    const [u0, v0, u1, v1] = textureManager.getUVs(blockId, faceIndex);
-    
-    // Debug: log first UV calculation
-    if (!this.hasLoggedUVs) {
-      console.log(`[GeometryBuilder] First UV calc: blockId=${blockId}, face=${faceIndex}, UVs=[${u0}, ${v0}, ${u1}, ${v1}]`);
-      this.hasLoggedUVs = true;
-    }
-    
-    return [u0, v0, u1, v1];
-  }
-
-  private static hasLoggedUVs = false;
 
   static buildGeometry(chunk: ChunkData, enableAO: boolean = false): THREE.BufferGeometry | null {
     const positions: number[] = [];
     const normals: number[] = [];
     const uvs: number[] = [];
     const indices: number[] = [];
-    const colors: number[] = []; // For ambient occlusion
+    const colors: number[] = [];
 
     const offsetX = chunk.cx * CHUNK_SIZE;
     const offsetY = chunk.cy * CHUNK_SIZE;
     const offsetZ = chunk.cz * CHUNK_SIZE;
 
-    for (let x = 0; x < CHUNK_SIZE; x++) {
-      for (let y = 0; y < CHUNK_SIZE; y++) {
-        for (let z = 0; z < CHUNK_SIZE; z++) {
-          const blockId = this.getBlockId(chunk.blocks, x, y, z);
+    for (let y = 0; y < CHUNK_SIZE; y++) {
+      for (let z = 0; z < CHUNK_SIZE; z++) {
+        for (let x = 0; x < CHUNK_SIZE; x++) {
+          const blockId = this.getBlockAt(chunk.blocks, x, y, z);
           if (blockId === 0) continue;
 
-          const wx = offsetX + x;
-          const wy = offsetY + y;
-          const wz = offsetZ + z;
+          const worldX = offsetX + x;
+          const worldY = offsetY + y;
+          const worldZ = offsetZ + z;
 
-          if (this.shouldRenderFace(chunk.blocks, x, y, z, 0, 1, 0)) {
-            const faceUVs = this.getUVs(blockId, 0);
-            const ao = enableAO ? 0.9 : 1.0; // Top face: slightly darker if AO enabled
-            this.addFace(positions, normals, uvs, indices, colors, wx, wy + 1, wz, 1, 0, 0, 0, 0, 1, 0, 1, 0, faceUVs, ao);
-          }
-
-          if (this.shouldRenderFace(chunk.blocks, x, y, z, 0, -1, 0)) {
-            const faceUVs = this.getUVs(blockId, 1);
-            const ao = enableAO ? 0.5 : 1.0; // Bottom face: much darker if AO enabled
-            this.addFace(positions, normals, uvs, indices, colors, wx, wy, wz, 1, 0, 0, 0, 0, -1, 0, -1, 0, faceUVs, ao);
-          }
-
-          if (this.shouldRenderFace(chunk.blocks, x, y, z, 1, 0, 0)) {
-            const faceUVs = this.getUVs(blockId, 2);
-            const ao = enableAO ? 0.75 : 1.0; // Side face
-            this.addFace(positions, normals, uvs, indices, colors, wx + 1, wy, wz, 0, 1, 0, 0, 0, 1, 1, 0, 0, faceUVs, ao);
-          }
-
-          if (this.shouldRenderFace(chunk.blocks, x, y, z, -1, 0, 0)) {
-            const faceUVs = this.getUVs(blockId, 3);
-            const ao = enableAO ? 0.75 : 1.0; // Side face
-            this.addFace(positions, normals, uvs, indices, colors, wx, wy, wz, 0, 1, 0, 0, 0, -1, -1, 0, 0, faceUVs, ao);
-          }
-
-          if (this.shouldRenderFace(chunk.blocks, x, y, z, 0, 0, 1)) {
-            const faceUVs = this.getUVs(blockId, 4);
-            const ao = enableAO ? 0.75 : 1.0; // Side face
-            this.addFace(positions, normals, uvs, indices, colors, wx, wy, wz + 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, faceUVs, ao);
-          }
-
-          if (this.shouldRenderFace(chunk.blocks, x, y, z, 0, 0, -1)) {
-            const faceUVs = this.getUVs(blockId, 5);
-            const ao = enableAO ? 0.75 : 1.0; // Side face
-            this.addFace(positions, normals, uvs, indices, colors, wx, wy, wz, -1, 0, 0, 0, 1, 0, 0, 0, -1, faceUVs, ao);
+          for (const face of CUBE_FACES) {
+            const [dx, dy, dz] = face.direction;
+            const neighborBlock = this.getBlockAt(chunk.blocks, x + dx, y + dy, z + dz);
+            
+            if (neighborBlock === 0) {
+              const uvCoordinates = textureManager.getUVs(blockId, face.faceIndex);
+              const brightness = enableAO ? this.calculateBrightness(face.name) : 1.0;
+              
+              this.createQuad(
+                positions,
+                normals,
+                uvs,
+                indices,
+                colors,
+                worldX,
+                worldY,
+                worldZ,
+                face.vertices,
+                face.direction,
+                uvCoordinates,
+                brightness
+              );
+            }
           }
         }
       }
@@ -114,70 +150,65 @@ export class GeometryBuilder {
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     
-    // Add color attribute for ambient occlusion if enabled
     if (enableAO && colors.length > 0) {
       geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     }
     
     geometry.setIndex(indices);
     geometry.computeBoundingSphere();
-    geometry.computeBoundingBox();
-
+    
     return geometry;
   }
 
-  private static addFace(
+  private static calculateBrightness(faceName: string): number {
+    switch (faceName) {
+      case 'top':
+        return 1.0;
+      case 'bottom':
+        return 0.5;
+      default:
+        return 0.75;
+    }
+  }
+
+  private static createQuad(
     positions: number[],
     normals: number[],
     uvs: number[],
     indices: number[],
     colors: number[],
-    x: number,
-    y: number,
-    z: number,
-    du: number,
-    dv: number,
-    dw: number,
-    su: number,
-    sv: number,
-    sw: number,
-    nx: number,
-    ny: number,
-    nz: number,
-    uvCoords: number[],
-    aoFactor: number = 1.0 // 1.0 = full brightness, 0.5 = darker for AO
+    baseX: number,
+    baseY: number,
+    baseZ: number,
+    vertices: number[][],
+    normal: number[],
+    uvCoordinates: number[],
+    brightness: number
   ): void {
-    const startIndex = positions.length / 3;
+    const vertexIndex = positions.length / 3;
 
-    positions.push(
-      x, y, z,
-      x + du, y + dv, z + dw,
-      x + du + su, y + dv + sv, z + dw + sw,
-      x + su, y + sv, z + sw
-    );
-
-    for (let i = 0; i < 4; i++) {
-      normals.push(nx, ny, nz);
-      // Add color for ambient occlusion (RGB, all same value for grayscale)
-      colors.push(aoFactor, aoFactor, aoFactor);
+    for (const vertex of vertices) {
+      positions.push(
+        baseX + vertex[0],
+        baseY + vertex[1],
+        baseZ + vertex[2]
+      );
+      normals.push(normal[0], normal[1], normal[2]);
+      colors.push(brightness, brightness, brightness);
     }
 
-    // Canvas Y goes down, WebGL texture V goes up
-    // So we need to flip V coordinates
-    const [u0, v0, u1, v1] = uvCoords;
-    const v0_flip = 1.0 - v0;
-    const v1_flip = 1.0 - v1;
+    const [u0, v0, u1, v1] = uvCoordinates;
     
-    // UV order matches vertex order: 
-    // vertex 0: (x, y, z) -> (u0, v1_flip)
-    // vertex 1: (x+du, y+dv, z+dw) -> (u1, v1_flip)
-    // vertex 2: (x+du+su, y+dv+sv, z+dw+sw) -> (u1, v0_flip)
-    // vertex 3: (x+su, y+sv, z+sw) -> (u0, v0_flip)
-    uvs.push(u0, v1_flip, u1, v1_flip, u1, v0_flip, u0, v0_flip);
+    uvs.push(
+      u0, 1.0 - v1,
+      u1, 1.0 - v1,
+      u1, 1.0 - v0,
+      u0, 1.0 - v0
+    );
 
     indices.push(
-      startIndex, startIndex + 1, startIndex + 2,
-      startIndex, startIndex + 2, startIndex + 3
+      vertexIndex + 0, vertexIndex + 1, vertexIndex + 2,
+      vertexIndex + 0, vertexIndex + 2, vertexIndex + 3
     );
   }
 }

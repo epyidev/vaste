@@ -85,8 +85,20 @@ export function VoxelWorld({ chunks, ambientOcclusionEnabled = false }: VoxelWor
         const chunk = chunkArray[i];
         const key = `${chunk.cx},${chunk.cy},${chunk.cz}`;
         
-        if (existingKeys.has(key)) continue;
+        // Check if chunk exists and if version matches
+        const existingMesh = group.children.find(c => c.userData.chunkKey === key);
+        if (existingMesh && existingMesh.userData.version === chunk.version) {
+          // Mesh exists and is up to date, skip
+          continue;
+        }
 
+        // Remove old mesh if it exists (version mismatch)
+        if (existingMesh) {
+          group.remove(existingMesh);
+          manager.removeMesh(chunk.cx, chunk.cy, chunk.cz);
+        }
+
+        // Create new mesh
         const mesh = manager.getOrCreateMesh({
           cx: chunk.cx,
           cy: chunk.cy,
@@ -97,6 +109,7 @@ export function VoxelWorld({ chunks, ambientOcclusionEnabled = false }: VoxelWor
 
         if (mesh) {
           mesh.userData.chunkKey = key;
+          mesh.userData.version = chunk.version; // Store version for comparison
           mesh.name = `chunk-${key}`; // Add name for BlockSelector
           group.add(mesh);
         }

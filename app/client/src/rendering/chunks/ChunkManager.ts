@@ -27,7 +27,7 @@ export class ChunkManager {
     
     this.material = new THREE.MeshStandardMaterial({
       map: texture || null,
-      side: THREE.DoubleSide, // Temporary: render both sides for debugging
+      side: THREE.FrontSide, // Only render front faces
       roughness: 1.0,
       metalness: 0.0,
       color: texture ? 0xffffff : 0x88cc88,
