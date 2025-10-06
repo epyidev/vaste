@@ -253,7 +253,14 @@ export function Game({ serverUrl, user }: GameProps) {
 
     const handleLockChange = () => {
       const locked = document.pointerLockElement !== null;
+      console.log('[PauseMenu] Pointer lock changed:', { locked, loadingState, isPaused, isSettingsOpen });
       setIsPointerLocked(locked);
+
+      // When unlocking during gameplay (not in menus), open pause menu
+      if (!locked && loadingState === 'ready' && !isPaused && !isSettingsOpen) {
+        console.log('[PauseMenu] Opening pause menu due to pointer unlock');
+        setIsPaused(true);
+      }
 
       // When locking, clear history and ignore first movement
       if (locked) {
@@ -331,31 +338,30 @@ export function Game({ serverUrl, user }: GameProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Handle ESC key
       if (e.key === 'Escape') {
+        console.log('[PauseMenu] ESC pressed:', { loadingState, isSettingsOpen, isPaused, isPointerLocked });
         if (loadingState !== 'ready') return;
-
-        e.preventDefault();
-        e.stopImmediatePropagation(); // Stop ALL other handlers
 
         // Priority 1: If settings are open, close settings and return to pause menu
         if (isSettingsOpen) {
+          console.log('[PauseMenu] Closing settings');
+          e.preventDefault();
+          e.stopImmediatePropagation();
           handleCloseSettings();
           return;
         }
 
         // Priority 2: If pause menu is open, close it and resume game
         if (isPaused) {
+          console.log('[PauseMenu] Closing pause menu, resuming game');
+          e.preventDefault();
+          e.stopImmediatePropagation();
           handleResume();
           return;
         }
 
-        // Priority 3: If playing, open pause menu (and unlock pointer)
-        if (!isPaused && !isSettingsOpen) {
-          if (controlsRef.current && isPointerLocked) {
-            controlsRef.current.unlock();
-          }
-          setIsPaused(true);
-          return;
-        }
+        // Priority 3: If playing, let browser handle pointer unlock (it will trigger handleLockChange)
+        console.log('[PauseMenu] Playing - letting browser unlock pointer');
+        // Don't prevent default here - let the browser unlock the pointer
       }
 
       // Block common browser shortcuts when playing
@@ -386,10 +392,12 @@ export function Game({ serverUrl, user }: GameProps) {
   // Pause menu handlers
   const handleResume = useCallback(() => {
     setIsPaused(false);
-    // Lock immediately (synchronous browser API)
-    if (controlsRef.current) {
-      controlsRef.current.lock();
-    }
+    // Small delay to avoid SecurityError when re-locking too quickly
+    setTimeout(() => {
+      if (controlsRef.current) {
+        controlsRef.current.lock();
+      }
+    }, 100);
   }, []);
 
   const handleOpenPauseMenu = useCallback(() => {
