@@ -15,9 +15,10 @@ interface ChunkData {
 interface VoxelWorldProps {
   chunks: Map<string, ChunkData>;
   ambientOcclusionEnabled?: boolean;
+  shadowsEnabled?: boolean;
 }
 
-export function VoxelWorld({ chunks, ambientOcclusionEnabled = false }: VoxelWorldProps) {
+export function VoxelWorld({ chunks, ambientOcclusionEnabled = true, shadowsEnabled = true }: VoxelWorldProps) {
   const groupRef = useRef<THREE.Group>(null);
   const managerRef = useRef<ChunkManager | null>(null);
   const [ready, setReady] = useState(false);
@@ -30,10 +31,10 @@ export function VoxelWorld({ chunks, ambientOcclusionEnabled = false }: VoxelWor
       
       if (!texture) {
         console.error('[VoxelWorld] Failed to get atlas texture');
-        managerRef.current = new ChunkManager(undefined, ambientOcclusionEnabled);
+        managerRef.current = new ChunkManager(undefined, ambientOcclusionEnabled, shadowsEnabled);
       } else {
         console.log('[VoxelWorld] Atlas texture ready');
-        managerRef.current = new ChunkManager(texture, ambientOcclusionEnabled);
+        managerRef.current = new ChunkManager(texture, ambientOcclusionEnabled, shadowsEnabled);
       }
       
       setReady(true);
@@ -41,7 +42,7 @@ export function VoxelWorld({ chunks, ambientOcclusionEnabled = false }: VoxelWor
 
     init().catch((error) => {
       console.error('[VoxelWorld] Initialization error:', error);
-      managerRef.current = new ChunkManager(undefined, ambientOcclusionEnabled);
+      managerRef.current = new ChunkManager(undefined, ambientOcclusionEnabled, shadowsEnabled);
       setReady(true);
     });
 
@@ -50,7 +51,14 @@ export function VoxelWorld({ chunks, ambientOcclusionEnabled = false }: VoxelWor
         managerRef.current.dispose();
       }
     };
-  }, [ambientOcclusionEnabled]); // Recréer le manager quand AO change
+  }, [ambientOcclusionEnabled]); // Recréer le manager seulement quand AO change
+
+  // Mettre à jour les ombres sans recréer le manager
+  useEffect(() => {
+    if (managerRef.current) {
+      managerRef.current.updateShadows(shadowsEnabled);
+    }
+  }, [shadowsEnabled]);
 
   useEffect(() => {
     if (!ready || !managerRef.current || !groupRef.current) return;

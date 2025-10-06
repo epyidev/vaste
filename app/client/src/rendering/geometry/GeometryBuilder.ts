@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { textureManager } from '../textures/TextureManager';
+import { calculateFaceAO, calculateDirectionalShading } from '../../utils/AmbientOcclusion';
 
 const CHUNK_SIZE = 16;
 
@@ -92,7 +93,7 @@ export class GeometryBuilder {
     return blocks[index] || 0;
   }
 
-  static buildGeometry(chunk: ChunkData, enableAO: boolean = false): THREE.BufferGeometry | null {
+  static buildGeometry(chunk: ChunkData, enableAO: boolean = true): THREE.BufferGeometry | null {
     const positions: number[] = [];
     const normals: number[] = [];
     const uvs: number[] = [];
@@ -102,6 +103,11 @@ export class GeometryBuilder {
     const offsetX = chunk.cx * CHUNK_SIZE;
     const offsetY = chunk.cy * CHUNK_SIZE;
     const offsetZ = chunk.cz * CHUNK_SIZE;
+
+    // Helper function to check if a block is solid (for AO calculation)
+    const isSolid = (x: number, y: number, z: number): boolean => {
+      return this.getBlockAt(chunk.blocks, x, y, z) !== 0;
+    };
 
     for (let y = 0; y < CHUNK_SIZE; y++) {
       for (let z = 0; z < CHUNK_SIZE; z++) {
@@ -119,7 +125,20 @@ export class GeometryBuilder {
             
             if (neighborBlock === 0) {
               const uvCoordinates = textureManager.getUVs(blockId, face.faceIndex);
-              const brightness = enableAO ? this.calculateBrightness(face.name) : 1.0;
+              
+              // Calculate directional shading (base lighting from face orientation)
+              const directionalShading = calculateDirectionalShading(face.name);
+              
+              // Calculate per-vertex AO if enabled
+              let vertexAO: [number, number, number, number] = [1, 1, 1, 1];
+              if (enableAO) {
+                vertexAO = calculateFaceAO(
+                  isSolid,
+                  x, y, z,
+                  dx, dy, dz,
+                  face.name  // Pass face name for correct vertex mapping
+                );
+              }
               
               this.createQuad(
                 positions,
@@ -133,7 +152,9 @@ export class GeometryBuilder {
                 face.vertices,
                 face.direction,
                 uvCoordinates,
-                brightness
+                directionalShading,
+                vertexAO,
+                enableAO
               );
             }
           }
@@ -150,25 +171,13 @@ export class GeometryBuilder {
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     
-    if (enableAO && colors.length > 0) {
-      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    }
+    // Always set vertex colors for proper voxel shading
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     
     geometry.setIndex(indices);
     geometry.computeBoundingSphere();
     
     return geometry;
-  }
-
-  private static calculateBrightness(faceName: string): number {
-    switch (faceName) {
-      case 'top':
-        return 1.0;
-      case 'bottom':
-        return 0.5;
-      default:
-        return 0.75;
-    }
   }
 
   private static createQuad(
@@ -183,18 +192,28 @@ export class GeometryBuilder {
     vertices: number[][],
     normal: number[],
     uvCoordinates: number[],
-    brightness: number
+    directionalShading: number,
+    vertexAO: [number, number, number, number],
+    enableAO: boolean
   ): void {
     const vertexIndex = positions.length / 3;
 
-    for (const vertex of vertices) {
+    // Add vertices with per-vertex lighting (directional + AO combined)
+    for (let i = 0; i < vertices.length; i++) {
+      const vertex = vertices[i];
       positions.push(
         baseX + vertex[0],
         baseY + vertex[1],
         baseZ + vertex[2]
       );
       normals.push(normal[0], normal[1], normal[2]);
-      colors.push(brightness, brightness, brightness);
+      
+      // Combine directional shading with per-vertex AO
+      const finalBrightness = enableAO 
+        ? directionalShading * vertexAO[i]  // Multiply base shading by AO
+        : directionalShading;                // Only directional if AO disabled
+      
+      colors.push(finalBrightness, finalBrightness, finalBrightness);
     }
 
     const [u0, v0, u1, v1] = uvCoordinates;

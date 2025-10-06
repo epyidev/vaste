@@ -21,18 +21,21 @@ export class ChunkManager {
   private material: THREE.Material;
   private maxCached = 1000;
   private ambientOcclusionEnabled: boolean;
+  private shadowsEnabled: boolean;
 
-  constructor(texture?: THREE.Texture, ambientOcclusionEnabled: boolean = false) {
+  constructor(texture?: THREE.Texture, ambientOcclusionEnabled: boolean = true, shadowsEnabled: boolean = true) {
     this.ambientOcclusionEnabled = ambientOcclusionEnabled;
+    this.shadowsEnabled = shadowsEnabled;
     
+    // Professional voxel material with flat shading for sharp edges
     this.material = new THREE.MeshStandardMaterial({
       map: texture || null,
-      side: THREE.FrontSide, // Only render front faces
-      roughness: 1.0,
-      metalness: 0.0,
+      side: THREE.FrontSide,
+      roughness: 0.9,        // Slightly less rough for better light interaction
+      metalness: 0.0,        // Non-metallic for natural blocks
       color: texture ? 0xffffff : 0x88cc88,
-      // Enable vertex colors for ambient occlusion
-      vertexColors: ambientOcclusionEnabled
+      vertexColors: true,    // ALWAYS enable vertex colors for AO and directional shading
+      flatShading: true,     // Sharp edges between faces - essential for voxel aesthetics
     });
 
     if (texture) {
@@ -60,6 +63,11 @@ export class ChunkManager {
     const mesh = new THREE.Mesh(geometry, this.material);
     mesh.frustumCulled = true;
     mesh.matrixAutoUpdate = false;
+    
+    // Enable shadows only if shadowsEnabled is true
+    mesh.castShadow = this.shadowsEnabled;
+    mesh.receiveShadow = this.shadowsEnabled;
+    
     mesh.updateMatrix();
 
     this.chunks.set(key, {
@@ -103,6 +111,15 @@ export class ChunkManager {
     }
     this.chunks.clear();
     this.material.dispose();
+  }
+
+  // Mettre à jour les propriétés d'ombre sur tous les meshes existants
+  updateShadows(shadowsEnabled: boolean): void {
+    this.shadowsEnabled = shadowsEnabled;
+    for (const cached of this.chunks.values()) {
+      cached.mesh.castShadow = shadowsEnabled;
+      cached.mesh.receiveShadow = shadowsEnabled;
+    }
   }
 
   getStats() {

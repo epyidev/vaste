@@ -11,6 +11,8 @@ export interface SettingsMenuProps {
   forceRenderDistance?: boolean;
   ambientOcclusionEnabled: boolean;
   onAmbientOcclusionChange: (enabled: boolean) => void;
+  shadowsEnabled: boolean;
+  onShadowsEnabledChange: (enabled: boolean) => void;
   mouseSensitivity: number;
   onMouseSensitivityChange: (value: number) => void;
   cinematicMode: boolean;
@@ -28,6 +30,8 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
   forceRenderDistance = false,
   ambientOcclusionEnabled,
   onAmbientOcclusionChange,
+  shadowsEnabled,
+  onShadowsEnabledChange,
   mouseSensitivity,
   onMouseSensitivityChange,
   cinematicMode,
@@ -245,6 +249,14 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                 label="RENDER DISTANCE"
                 description={`Controls how far you can see. Higher values may impact performance. (Max: ${maxRenderDistance})`}
                 disabled={forceRenderDistance}
+              />
+              
+              {/* Shadows Toggle - Maximum Quality */}
+              <ToggleButton
+                value={shadowsEnabled}
+                onChange={onShadowsEnabledChange}
+                label="SHADOWS"
+                description="Enable dynamic high-quality shadows from the sun (4096px). Disable for better performance."
               />
               
               {/* Ambient Occlusion Toggle */}

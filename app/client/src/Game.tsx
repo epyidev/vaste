@@ -39,8 +39,15 @@ export function Game({ serverUrl, user }: GameProps) {
   const [forceRenderDistance, setForceRenderDistance] = useState<boolean>(false);
   const [ambientOcclusionEnabled, setAmbientOcclusionEnabled] = useState(() => {
     const saved = localStorage.getItem('vaste_ambientOcclusion');
-    return saved !== null ? saved === 'true' : false; // Default disabled for performance
+    return saved !== null ? saved === 'true' : true; // Default ENABLED for professional voxel look
   });
+  
+  // Shadow settings - Simple toggle avec meilleure qualité possible
+  const [shadowsEnabled, setShadowsEnabled] = useState(() => {
+    const saved = localStorage.getItem('vaste_shadowsEnabled');
+    return saved !== null ? saved === 'true' : true; // Default enabled
+  });
+  
   const [mouseSensitivity, setMouseSensitivity] = useState(() => {
     const saved = localStorage.getItem('vaste_mouseSensitivity');
     return saved ? parseFloat(saved) : 0.002;
@@ -57,6 +64,23 @@ export function Game({ serverUrl, user }: GameProps) {
   const controlsRef = useRef<any>(null);
   const fpsCounterRef = useRef({ frames: 0, lastTime: performance.now() });
   const initialChunksLoadedRef = useRef(false);
+
+  // Shadow settings - Optimized for sharp voxel shadows
+  const shadowSettings = shadowsEnabled 
+    ? { 
+        enabled: true, 
+        mapSize: 8096,      // Reduced from 8192 for better performance while keeping quality
+        cameraSize: 100,
+        bias: 0.0000,      // Adjusted for less shadow acne on voxels
+        radius: 0           // Minimal blur for sharper voxel shadows
+      }
+    : { 
+        enabled: false, 
+        mapSize: 1024, 
+        cameraSize: 100, 
+        bias: -0.001,
+        radius: 0
+      };
 
   // FPS Counter
   useEffect(() => {
@@ -382,6 +406,11 @@ export function Game({ serverUrl, user }: GameProps) {
     localStorage.setItem('vaste_ambientOcclusion', enabled.toString());
   };
 
+  const handleShadowsEnabledChange = (enabled: boolean) => {
+    setShadowsEnabled(enabled);
+    localStorage.setItem('vaste_shadowsEnabled', enabled.toString());
+  };
+
   const handleMouseSensitivityChange = (value: number) => {
     setMouseSensitivity(value);
     localStorage.setItem('vaste_mouseSensitivity', value.toString());
@@ -457,7 +486,7 @@ export function Game({ serverUrl, user }: GameProps) {
           near: 0.1,
           far: 1000
         }}
-        shadows
+        shadows={shadowSettings.enabled}
       >
         {/* Controls */}
         <RawPointerLockControls 
@@ -488,31 +517,37 @@ export function Game({ serverUrl, user }: GameProps) {
         {/* Sky */}
         <Sky
           distance={450000}
-          sunPosition={[100, 20, 100]}
+          sunPosition={[100, 50, 50]} // Soleil plus haut et sur le côté
           inclination={0.6}
           azimuth={0.25}
         />
         
-        {/* Lighting */}
-        <ambientLight intensity={0.5} />
+        {/* Lighting - Adjusted for professional voxel shading */}
+        <ambientLight intensity={0.65} /> {/* Increased base light since AO handles local shadows */}
         <directionalLight
-          position={[50, 50, 25]}
-          intensity={0.8}
-          castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
-          shadow-camera-far={200}
-          shadow-camera-left={-50}
-          shadow-camera-right={50}
-          shadow-camera-top={50}
-          shadow-camera-bottom={-50}
+          position={[80, 100, 60]} // Sun position: high and to the side
+          intensity={shadowsEnabled ? 0.8 : 0.6} // Reduced intensity - vertex colors handle most shading
+          castShadow={shadowSettings.enabled}
+          shadow-mapSize-width={shadowSettings.mapSize}
+          shadow-mapSize-height={shadowSettings.mapSize}
+          shadow-camera-far={300}
+          shadow-camera-left={-shadowSettings.cameraSize}
+          shadow-camera-right={shadowSettings.cameraSize}
+          shadow-camera-top={shadowSettings.cameraSize}
+          shadow-camera-bottom={-shadowSettings.cameraSize}
+          shadow-bias={shadowSettings.bias}
+          shadow-radius={shadowSettings.radius}
         />
         
         {/* Fog */}
         <fog attach="fog" args={["#87CEEB", 80, 200]} />
         
         {/* Voxel World */}
-        <VoxelWorld chunks={chunks} ambientOcclusionEnabled={ambientOcclusionEnabled} />
+        <VoxelWorld 
+          chunks={chunks} 
+          ambientOcclusionEnabled={ambientOcclusionEnabled} 
+          shadowsEnabled={shadowsEnabled}
+        />
       </Canvas>
       </div>
 
@@ -568,6 +603,8 @@ export function Game({ serverUrl, user }: GameProps) {
         forceRenderDistance={forceRenderDistance}
         ambientOcclusionEnabled={ambientOcclusionEnabled}
         onAmbientOcclusionChange={handleAmbientOcclusionChange}
+        shadowsEnabled={shadowsEnabled}
+        onShadowsEnabledChange={handleShadowsEnabledChange}
         mouseSensitivity={mouseSensitivity}
         onMouseSensitivityChange={handleMouseSensitivityChange}
         cinematicMode={isCinematicMode}
