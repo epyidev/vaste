@@ -6,7 +6,7 @@ import { NetworkManager } from "./network";
 import { VoxelWorld } from "./components/VoxelWorld";
 import { PlayerController } from "./components/PlayerController";
 import { BlockSelector } from "./components/BlockSelector";
-import { SmoothPointerLockControls } from "./components/SmoothPointerLockControls";
+import { RawPointerLockControls } from "./components/RawPointerLockControls";
 import LoadingScreen from "./components/ui/LoadingScreen";
 import { PauseMenu } from "./components/ui/PauseMenu";
 import { SettingsMenu } from "./components/ui/SettingsMenu";
@@ -41,6 +41,17 @@ export function Game({ serverUrl, user }: GameProps) {
     const saved = localStorage.getItem('vaste_ambientOcclusion');
     return saved !== null ? saved === 'true' : false; // Default disabled for performance
   });
+  const [mouseSensitivity, setMouseSensitivity] = useState(() => {
+    const saved = localStorage.getItem('vaste_mouseSensitivity');
+    return saved ? parseFloat(saved) : 0.002;
+  });
+  
+  // Cinematic mode toggle
+  const [isCinematicMode, setIsCinematicMode] = useState(() => {
+    const saved = localStorage.getItem('vaste_cinematicMode');
+    return saved !== null ? saved === 'true' : false; // Default disabled
+  });
+  
   const [clearChunks, setClearChunks] = useState(false);
   const networkRef = useRef<NetworkManager | null>(null);
   const controlsRef = useRef<any>(null);
@@ -371,6 +382,16 @@ export function Game({ serverUrl, user }: GameProps) {
     localStorage.setItem('vaste_ambientOcclusion', enabled.toString());
   };
 
+  const handleMouseSensitivityChange = (value: number) => {
+    setMouseSensitivity(value);
+    localStorage.setItem('vaste_mouseSensitivity', value.toString());
+  };
+
+  const handleCinematicModeChange = (enabled: boolean) => {
+    setIsCinematicMode(enabled);
+    localStorage.setItem('vaste_cinematicMode', enabled.toString());
+  };
+
   const handlePlayerPositionChange = (pos: { x: number; y: number; z: number }) => {
     setPlayerPos(pos);
     playerPosVector.current.set(pos.x, pos.y, pos.z);
@@ -439,11 +460,11 @@ export function Game({ serverUrl, user }: GameProps) {
         shadows
       >
         {/* Controls */}
-        <SmoothPointerLockControls 
+        <RawPointerLockControls 
           ref={controlsRef}
-          sensitivity={0.002}
+          sensitivity={mouseSensitivity}
           verticalClampDegrees={89}
-          smoothingFactor={0.5}
+          cinematicMode={isCinematicMode}
         />
         
         {/* Player Controller */}
@@ -547,6 +568,10 @@ export function Game({ serverUrl, user }: GameProps) {
         forceRenderDistance={forceRenderDistance}
         ambientOcclusionEnabled={ambientOcclusionEnabled}
         onAmbientOcclusionChange={handleAmbientOcclusionChange}
+        mouseSensitivity={mouseSensitivity}
+        onMouseSensitivityChange={handleMouseSensitivityChange}
+        cinematicMode={isCinematicMode}
+        onCinematicModeChange={handleCinematicModeChange}
       />
     </div>
   );

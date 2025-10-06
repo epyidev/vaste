@@ -11,9 +11,13 @@ export interface SettingsMenuProps {
   forceRenderDistance?: boolean;
   ambientOcclusionEnabled: boolean;
   onAmbientOcclusionChange: (enabled: boolean) => void;
+  mouseSensitivity: number;
+  onMouseSensitivityChange: (value: number) => void;
+  cinematicMode: boolean;
+  onCinematicModeChange: (enabled: boolean) => void;
 }
 
-type SettingsTab = 'graphics' | 'controls';
+type SettingsTab = 'graphics' | 'mouse' | 'controls';
 
 export const SettingsMenu: React.FC<SettingsMenuProps> = ({
   isOpen,
@@ -24,6 +28,10 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
   forceRenderDistance = false,
   ambientOcclusionEnabled,
   onAmbientOcclusionChange,
+  mouseSensitivity,
+  onMouseSensitivityChange,
+  cinematicMode,
+  onCinematicModeChange,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('graphics');
   const [localRenderDistance, setLocalRenderDistance] = useState(currentRenderDistance);
@@ -63,6 +71,14 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
     backdropFilter: 'blur(4px)',
     opacity: isVisible ? 1 : 0,
     transition: 'opacity 0.2s ease-out',
+  };
+
+  const containerStyles: React.CSSProperties = {
+    maxWidth: '600px',
+    width: '90%',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
   };
 
   const titleStyles: React.CSSProperties = {
@@ -106,7 +122,8 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
   });
 
   const settingsContentStyles: React.CSSProperties = {
-    minWidth: '500px',
+    width: '100%',
+    maxWidth: '500px',
     display: 'flex',
     flexDirection: 'column',
     gap: '24px',
@@ -160,11 +177,12 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
 
   return (
     <div style={overlayStyles}>
-      <div style={titleStyles}>SETTINGS</div>
-      
-      <div style={contentContainerStyles}>
-        {/* Tabs */}
-        <div style={tabsContainerStyles}>
+      <div style={containerStyles}>
+        <div style={titleStyles}>SETTINGS</div>
+        
+        <div style={contentContainerStyles}>
+          {/* Tabs */}
+          <div style={tabsContainerStyles}>
           <button
             style={tabStyles(activeTab === 'graphics')}
             onClick={() => setActiveTab('graphics')}
@@ -180,6 +198,22 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
             }}
           >
             GRAPHICS
+          </button>
+          <button
+            style={tabStyles(activeTab === 'mouse')}
+            onClick={() => setActiveTab('mouse')}
+            onMouseEnter={(e) => {
+              if (activeTab !== 'mouse') {
+                e.currentTarget.style.color = '#999999';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== 'mouse') {
+                e.currentTarget.style.color = '#666666';
+              }
+            }}
+          >
+            MOUSE
           </button>
           <button
             style={tabStyles(activeTab === 'controls')}
@@ -222,6 +256,26 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
               />
             </>
           )}
+          {activeTab === 'mouse' && (
+            <>
+              <Slider
+                value={mouseSensitivity}
+                min={0.0005}
+                max={0.01}
+                step={0.0001}
+                onChange={onMouseSensitivityChange}
+                label="MOUSE SENSITIVITY"
+                description="Controls how fast the camera moves with mouse input. Lower = slower."
+              />
+              
+              <ToggleButton
+                value={cinematicMode}
+                onChange={onCinematicModeChange}
+                label="CINEMATIC MODE"
+                description="Adds ultra-smooth camera movement with heavy inertia. Perfect for capturing smooth cinematic footage of your builds. Disable for instant 1:1 raw input (recommended for gameplay)."
+              />
+            </>
+          )}
           {activeTab === 'controls' && (
             <div style={comingSoonStyles}>
               Controls settings coming soon...
@@ -261,6 +315,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
         </div>
 
         <div style={hintStyles}>Press ESC to go back</div>
+      </div>
       </div>
     </div>
   );

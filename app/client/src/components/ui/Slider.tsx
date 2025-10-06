@@ -4,6 +4,7 @@ export interface SliderProps {
   value: number;
   min: number;
   max: number;
+  step?: number;
   onChange: (value: number) => void;
   label?: string;
   description?: string;
@@ -14,6 +15,7 @@ export const Slider: React.FC<SliderProps> = ({
   value,
   min,
   max,
+  step = 1,
   onChange,
   label,
   description,
@@ -29,8 +31,10 @@ export const Slider: React.FC<SliderProps> = ({
     const rect = sliderRef.current.getBoundingClientRect();
     const x = clientX - rect.left;
     const percentage = Math.max(0, Math.min(1, x / rect.width));
-    const newValue = Math.round(min + percentage * (max - min));
-    const clampedValue = Math.max(min, Math.min(max, newValue));
+    const rawValue = min + percentage * (max - min);
+    // Round to nearest step
+    const steppedValue = Math.round(rawValue / step) * step;
+    const clampedValue = Math.max(min, Math.min(max, steppedValue));
     
     onChange(clampedValue);
   };
@@ -169,7 +173,9 @@ export const Slider: React.FC<SliderProps> = ({
             <div style={sliderThumbStyles} />
           </div>
         </div>
-        <div style={valueDisplayStyles}>{value}</div>
+        <div style={valueDisplayStyles}>
+          {step < 1 ? value.toFixed(4) : value}
+        </div>
       </div>
 
       {description && <div style={descriptionStyles}>{description}</div>}
