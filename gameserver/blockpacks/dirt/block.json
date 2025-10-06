@@ -1,0 +1,10 @@
+{
+  "stringId": "vaste:dirt",
+  "name": "dirt",
+  "displayName": "Dirt",
+  "solid": true,
+  "transparent": false,
+  "textures": {
+    "all": "/blockpacks/dirt/textures/dirt.png"
+  }
+}

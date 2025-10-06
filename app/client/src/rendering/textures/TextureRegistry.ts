@@ -18,6 +18,7 @@ export interface BlockTextures {
   textures: {
     top?: string;
     bottom?: string;
+    side?: string;      // NEW: Shortcut for all 4 sides
     north?: string;
     south?: string;
     east?: string;
@@ -52,6 +53,7 @@ export class TextureRegistry {
     } else {
       if (textures.top) this.registerTexture(textures.top);
       if (textures.bottom) this.registerTexture(textures.bottom);
+      if (textures.side) this.registerTexture(textures.side);  // NEW: Register side texture
       if (textures.north) this.registerTexture(textures.north);
       if (textures.south) this.registerTexture(textures.south);
       if (textures.east) this.registerTexture(textures.east);
@@ -65,21 +67,22 @@ export class TextureRegistry {
 
     const { textures } = block;
     
+    // If "all" is defined, use it for everything
     if (textures.all) {
       return [textures.all, textures.all, textures.all, textures.all, textures.all, textures.all];
     }
 
     // Face order: top(Y+), bottom(Y-), east(X+), west(X-), south(Z+), north(Z-)
-    // If no specific side is defined, use 'north' as default for all sides
-    const sideDefault = textures.north || textures.south || textures.east || textures.west || textures.all || 'missing';
+    // "side" is a shortcut for north, south, east, west
+    const sideTexture = textures.side || textures.north || textures.south || textures.east || textures.west || 'missing';
     
     return [
-      textures.top || textures.all || sideDefault,
-      textures.bottom || textures.all || sideDefault,
-      textures.east || sideDefault,
-      textures.west || sideDefault,
-      textures.south || sideDefault,
-      textures.north || sideDefault,
+      textures.top || textures.all || sideTexture,
+      textures.bottom || textures.all || sideTexture,
+      textures.east || textures.side || sideTexture,
+      textures.west || textures.side || sideTexture,
+      textures.south || textures.side || sideTexture,
+      textures.north || textures.side || sideTexture,
     ];
   }
 

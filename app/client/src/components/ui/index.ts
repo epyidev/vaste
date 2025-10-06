@@ -7,4 +7,5 @@ export { PauseMenu } from './PauseMenu';
 export type { ButtonProps } from './Button';
 export type { SpinnerProps } from './Spinner';
 export type { InputProps } from './Input';
-export type { LoadingScreenProps } from './LoadingScreen';
+export type { LoadingScreenProps, LoadingStep } from './LoadingScreen';
+

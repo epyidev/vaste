@@ -4,6 +4,8 @@
  */
 
 import { logger } from "./utils/logger";
+import { loadBlockpacksFromServer, blockMapping } from "./data/BlockRegistry";
+import { LoadingStep } from "./components/ui";
 
 const CHUNK_SIZE = 16;
 
@@ -55,13 +57,17 @@ export class NetworkManager {
     spawnPoint: { x: number; y: number; z: number },
     serverSettings?: { maxRenderDistance?: number; forceRenderDistance?: boolean }
   ) => void;
+  private onLoadingStep?: (name: string, status: LoadingStep['status'], detail?: string) => void;
+  private onBlockpacksReady?: () => void;
   
   private authenticatedUser: any = null;
 
   constructor(
     onStateUpdate: (state: GameState) => void,
     onConnectionChange: (connected: boolean) => void,
-    user?: any
+    user?: any,
+    onLoadingStep?: (name: string, status: LoadingStep['status'], detail?: string) => void,
+    onBlockpacksReady?: () => void
   ) {
     this.gameState = {
       playerId: null,
@@ -76,6 +82,8 @@ export class NetworkManager {
     this.onStateUpdate = onStateUpdate;
     this.onConnectionChange = onConnectionChange;
     this.authenticatedUser = user || null;
+    this.onLoadingStep = onLoadingStep;
+    this.onBlockpacksReady = onBlockpacksReady;
   }
 
   setAuthenticatedUser(user: any) {
@@ -194,15 +202,18 @@ export class NetworkManager {
   connect(serverUrl: string): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        this.onLoadingStep?.('Connecting to server', 'loading', serverUrl);
         this.ws = new WebSocket(serverUrl);
 
         this.ws.onopen = () => {
           logger.info("[Network] Connected to server");
           this.gameState.connected = true;
           this.onConnectionChange(true);
+          this.onLoadingStep?.('Connecting to server', 'completed', 'Connection established');
 
           // Send authentication
           if (this.authenticatedUser) {
+            this.onLoadingStep?.('Authenticating', 'loading', `Logging in as ${this.authenticatedUser.username}...`);
             const token = localStorage.getItem("vaste_token");
             this.sendMessage({
               type: "auth_info",
@@ -367,6 +378,10 @@ export class NetworkManager {
    */
   private handleMessage(message: any) {
     switch (message.type) {
+      case "blockpacks_data":
+        this.handleBlockpacksData(message);
+        break;
+
       case "block_mapping":
         this.handleBlockMapping(message);
         break;
@@ -397,6 +412,49 @@ export class NetworkManager {
   }
 
   /**
+   * Handle blockpacks data from server
+   */
+  private async handleBlockpacksData(message: any) {
+    logger.info(`[Network] Received ${message.blockpacks.length} blockpacks from server`);
+    this.onLoadingStep?.('Downloading blockpacks', 'loading', `Receiving ${message.blockpacks.length} blockpack(s)...`);
+    
+    try {
+      // Extract server host from WebSocket URL
+      const wsUrl = this.ws?.url || '';
+      const url = new URL(wsUrl);
+      const serverUrl = `http://${url.hostname}:25566`; // HTTP port for blockpack assets
+      
+      this.onLoadingStep?.('Downloading blockpacks', 'loading', `Loading definitions from ${url.hostname}...`);
+      
+      // Load blockpacks from server data
+      await loadBlockpacksFromServer(message.blockpacks, serverUrl);
+      
+      this.onLoadingStep?.('Downloading blockpacks', 'completed', `${message.blockpacks.length} blockpack(s) loaded`);
+      this.onLoadingStep?.('Initializing block registry', 'loading', 'Mapping block IDs...');
+      
+      // Initialize block mapping with loaded blocks
+      blockMapping.initializeFromRegistry();
+      
+      this.onLoadingStep?.('Initializing block registry', 'completed', `${blockMapping.getAllStringIds().length} blocks registered`);
+      
+      logger.info('[Network] Blockpacks loaded and registry initialized');
+      
+      // Notify that blockpacks are ready
+      if (this.onBlockpacksReady) {
+        this.onBlockpacksReady();
+      }
+      
+      // Notify that we're ready for world assignment
+      this.onLoadingStep?.('Confirming readiness', 'loading', 'Sending confirmation to server...');
+      this.sendMessage({ type: "blockpacks_loaded" });
+      this.onLoadingStep?.('Confirming readiness', 'completed', 'Ready for world data');
+    } catch (error) {
+      logger.error('[Network] Error loading blockpacks:', error);
+      this.onLoadingStep?.('Downloading blockpacks', 'error', 'Failed to load blockpacks');
+    }
+  }
+
+  /**
    * Handle block mapping table from server
    */
   private handleBlockMapping(message: any) {
@@ -416,6 +474,8 @@ export class NetworkManager {
     logger.info(`[Network] World assigned: ${message.generatorType}`);
     logger.info(`[Network] Spawn point: (${message.spawnPoint.x}, ${message.spawnPoint.y}, ${message.spawnPoint.z})`);
     
+    this.onLoadingStep?.('Receiving world data', 'loading', `Generator: ${message.generatorType}`);
+    
     if (message.maxRenderDistance !== undefined) {
       logger.info(`[Network] Server max render distance: ${message.maxRenderDistance}`);
     }
@@ -426,6 +486,9 @@ export class NetworkManager {
     this.gameState.worldAssigned = true;
     this.gameState.spawnPoint = message.spawnPoint;
     this.gameState.generatorType = message.generatorType;
+
+    this.onLoadingStep?.('Receiving world data', 'completed', `Spawn at (${Math.floor(message.spawnPoint.x)}, ${Math.floor(message.spawnPoint.y)}, ${Math.floor(message.spawnPoint.z)})`);
+    this.onLoadingStep?.('Loading terrain', 'loading', 'Requesting initial chunks...');
 
     if (this.onWorldAssigned) {
       this.onWorldAssigned(message.spawnPoint, {

@@ -1,11 +1,13 @@
 /**
  * Texture Manager - Main facade for texture system
+ * Loads textures from server-side blockpack definitions
  */
 
 import * as THREE from 'three';
 import { TextureRegistry, textureRegistry } from './TextureRegistry';
 import { TextureLoader, textureLoader } from './TextureLoader';
 import { TextureAtlasBuilder } from './TextureAtlasBuilder';
+import { getBlockRegistry, BlockDefinition, blockMapping } from '../../data/BlockRegistry';
 
 export class TextureManager {
   private registry: TextureRegistry;
@@ -26,7 +28,8 @@ export class TextureManager {
 
     console.log('[TextureManager] Initializing...');
 
-    this.registerDefaultBlocks();
+    // Register blocks from BlockRegistry (loaded from server)
+    this.registerBlocksFromRegistry();
 
     this.atlasBuilder = new TextureAtlasBuilder(this.registry, this.loader, 2048);
     await this.atlasBuilder.build();
@@ -35,59 +38,50 @@ export class TextureManager {
     console.log('[TextureManager] Initialization complete');
   }
 
-  private registerDefaultBlocks(): void {
-    console.log('[TextureManager] Registering default blocks...');
+  /**
+   * Register blocks from BlockRegistry (server-side blockpacks)
+   */
+  private registerBlocksFromRegistry(): void {
+    console.log('[TextureManager] Registering blocks from server blockpacks...');
     
-    this.registry.registerBlock({
-      blockId: 1,
-      name: 'stone',
-      textures: {
-        all: '/blockpacks/stone/textures/stone.png'
-      }
-    });
+    const BLOCK_REGISTRY = getBlockRegistry();
+    let registeredCount = 0;
 
-    this.registry.registerBlock({
-      blockId: 2,
-      name: 'dirt',
-      textures: {
-        all: '/blockpacks/dirt/textures/dirt.png'
-      }
-    });
+    for (const [stringId, blockDef] of BLOCK_REGISTRY) {
+      // Skip air (no textures)
+      if (blockDef.stringId === 'vaste:air') continue;
 
-    this.registry.registerBlock({
-      blockId: 3,
-      name: 'grass',
-      textures: {
-        top: '/blockpacks/grass/textures/grass_top.png',
-        bottom: '/blockpacks/dirt/textures/dirt.png',
-        north: '/blockpacks/grass/textures/grass_side.png',
-        south: '/blockpacks/grass/textures/grass_side.png',
-        east: '/blockpacks/grass/textures/grass_side.png',
-        west: '/blockpacks/grass/textures/grass_side.png',
-      }
-    });
+      // Extract numeric ID from mapping (for compatibility with old system)
+      // For now, use a simple hash or counter
+      const blockId = this.getBlockIdFromStringId(stringId);
 
-    this.registry.registerBlock({
-      blockId: 4,
-      name: 'wood',
-      textures: {
-        all: '/blockpacks/wood/textures/wood.png'
+      if (blockDef.textures) {
+        this.registry.registerBlock({
+          blockId: blockId,
+          name: blockDef.name,
+          textures: blockDef.textures
+        });
+        registeredCount++;
       }
-    });
-
-    this.registry.registerBlock({
-      blockId: 5,
-      name: 'sand',
-      textures: {
-        all: '/blockpacks/sand/textures/sand.png'
-      }
-    });
+    }
 
     const allTextures = this.registry.getAllTextures();
-    console.log(`[TextureManager] Registered 5 blocks with ${allTextures.length} unique textures`);
-    allTextures.forEach(tex => {
-      console.log(`  - ${tex.path} (${tex.width}x${tex.height})`);
-    });
+    console.log(`[TextureManager] Registered ${registeredCount} blocks with ${allTextures.length} unique textures from server`);
+  }
+
+  /**
+   * Simple hash function to get numeric ID from string ID
+   * This is temporary - ideally should use blockMapping
+   */
+  private getBlockIdFromStringId(stringId: string): number {
+    // Simple hash for now
+    let hash = 0;
+    for (let i = 0; i < stringId.length; i++) {
+      const char = stringId.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash) % 10000; // Keep it reasonable
   }
 
   getTexture(): THREE.Texture | null {
@@ -104,11 +98,17 @@ export class TextureManager {
       return [0, 0, 1, 1];
     }
 
-    const facePaths = this.registry.getBlockTextures(blockId);
+    // Convert numeric ID to string ID using blockMapping
+    const stringId = blockMapping.getStringId(blockId);
+    
+    // Convert string ID to hash ID (same as registration)
+    const hashId = this.getBlockIdFromStringId(stringId);
+    
+    const facePaths = this.registry.getBlockTextures(hashId);
     const texturePath = facePaths[faceIndex];
 
     if (!this.hasLoggedGetUVs) {
-      console.log(`[TextureManager] getUVs called: blockId=${blockId}, faceIndex=${faceIndex}, path=${texturePath}`);
+      console.log(`[TextureManager] getUVs called: numericId=${blockId}, stringId=${stringId}, hashId=${hashId}, faceIndex=${faceIndex}, path=${texturePath}`);
       this.hasLoggedGetUVs = true;
     }
 

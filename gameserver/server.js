@@ -11,9 +11,14 @@ const path = require("path");
 const { VasteModSystem } = require("./VasteModSystem");
 const { ChunkProtocol } = require("./world/ChunkProtocol");
 const { CHUNK_SIZE } = require("./world");
+const { BlockpackManager } = require("./BlockpackManager");
 
 const PORT = process.env.PORT || 25565;
+const HTTP_PORT = process.env.HTTP_PORT || 25566; // HTTP port for blockpack assets
 const DEFAULT_RENDER_DISTANCE = 4; // chunks
+
+// Initialize Blockpack Manager
+const blockpackManager = new BlockpackManager(path.join(__dirname, "blockpacks"));
 
 // Logging utility
 function log(message, level = "INFO") {
@@ -226,12 +231,56 @@ class GameServer {
     this.wss.on("listening", () => log(`WebSocket server listening on port ${PORT}`));
     this.wss.on("error", (err) => log(`WebSocket server error: ${err.message}`, "ERROR"));
 
-    log(`Vaste server started on port ${PORT}`);
+    // HTTP server for blockpack assets (textures)
+    this.httpServer = http.createServer((req, res) => {
+      this.handleHttpRequest(req, res);
+    });
+    this.httpServer.listen(HTTP_PORT, () => {
+      log(`HTTP server for blockpack assets listening on port ${HTTP_PORT}`);
+    });
+
+    log(`Vaste server started on port ${PORT} (WebSocket) and ${HTTP_PORT} (HTTP)`);
     this.initializeServer();
+  }
+
+  handleHttpRequest(req, res) {
+    // Parse URL
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    
+    // CORS headers for client access
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    // Handle blockpack texture requests: /blockpacks/{blockName}/textures/{filename}
+    const match = url.pathname.match(/^\/blockpacks\/([^\/]+)\/textures\/(.+)$/);
+    
+    if (match) {
+      const [, blockName, texturePath] = match;
+      
+      blockpackManager.getTexture(blockName, texturePath)
+        .then(textureData => {
+          res.setHeader('Content-Type', 'image/png');
+          res.writeHead(200);
+          res.end(textureData);
+        })
+        .catch(error => {
+          log(`Texture request failed: ${error.message}`, "WARN");
+          res.writeHead(404);
+          res.end('Texture not found');
+        });
+    } else {
+      res.writeHead(404);
+      res.end('Not found');
+    }
   }
 
   async initializeServer() {
     try {
+      log("Initializing blockpack system...");
+      await blockpackManager.initialize();
+      log(`Blockpacks ready: ${blockpackManager.getBlockpacksList().join(', ')}`);
+
       log("Loading mods...");
       await this.modSystem.loadMods();
 
@@ -306,11 +355,28 @@ class GameServer {
           if (message.type === "auth_info") {
             try {
               authenticatedUser = await this.handleAuthentication(ws, message, tempConnectionId, authTimeout);
-              await this.initializeAuthenticatedPlayer(ws, authenticatedUser);
+              // Don't initialize player yet - wait for blockpacks_loaded confirmation
             } catch (error) {
               log(`Authentication failed: ${error.message}`, "ERROR");
               ws.send(JSON.stringify({ type: "error", message: "Authentication failed" }));
               ws.close(1008, "Authentication failed");
+            }
+            return;
+          }
+
+          // Handle blockpacks loaded confirmation
+          if (message.type === "blockpacks_loaded") {
+            if (!authenticatedUser) {
+              log("Received blockpacks_loaded before authentication", "WARN");
+              return;
+            }
+            
+            log(`Client ${authenticatedUser.username} loaded blockpacks, initializing player...`);
+            try {
+              await this.initializeAuthenticatedPlayer(ws, authenticatedUser);
+            } catch (error) {
+              log(`Player initialization failed: ${error.message}`, "ERROR");
+              ws.send(JSON.stringify({ type: "error", message: "Initialization failed" }));
             }
             return;
           }
@@ -363,6 +429,28 @@ class GameServer {
 
       // Clear auth timeout
       if (authTimeout) clearTimeout(authTimeout);
+
+      // Send blockpacks to client immediately after authentication
+      log(`Sending blockpacks to ${user.username}...`);
+      const blockpacksList = blockpackManager.getBlockpacksList();
+      const blockDefinitions = [];
+
+      for (const blockName of blockpacksList) {
+        try {
+          const blockDef = await blockpackManager.getBlockJson(blockName);
+          blockDefinitions.push(blockDef);
+        } catch (error) {
+          log(`Error getting blockpack ${blockName}: ${error.message}`, "ERROR");
+        }
+      }
+
+      // Send blockpacks data to client
+      ws.send(JSON.stringify({
+        type: "blockpacks_data",
+        blockpacks: blockDefinitions
+      }));
+
+      log(`Sent ${blockDefinitions.length} blockpacks to ${user.username}`);
 
       return user;
     } catch (error) {

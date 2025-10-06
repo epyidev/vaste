@@ -11,6 +11,8 @@ interface ChunkData {
   blocks: Uint16Array;
 }
 
+let hasLoggedUVs = false; // Debug flag
+
 /**
  * Face definitions for a unit cube
  * Vertices are in counter-clockwise order when viewed from outside
@@ -217,6 +219,15 @@ export class GeometryBuilder {
     }
 
     const [u0, v0, u1, v1] = uvCoordinates;
+    
+    // Debug: Log UV coordinates for the first quad only
+    if (!hasLoggedUVs) {
+      console.log('[GeometryBuilder] UV coordinates from atlas:');
+      console.log(`  u0=${u0}, v0=${v0}, u1=${u1}, v1=${v1}`);
+      console.log(`  Applied UVs (flipped V):`);
+      console.log(`    [${u0}, ${1.0 - v1}], [${u1}, ${1.0 - v1}], [${u1}, ${1.0 - v0}], [${u0}, ${1.0 - v0}]`);
+      hasLoggedUVs = true;
+    }
     
     uvs.push(
       u0, 1.0 - v1,

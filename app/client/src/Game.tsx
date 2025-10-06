@@ -8,6 +8,7 @@ import { PlayerController } from "./components/PlayerController";
 import { BlockSelector } from "./components/BlockSelector";
 import { RawPointerLockControls } from "./components/RawPointerLockControls";
 import LoadingScreen from "./components/ui/LoadingScreen";
+import { LoadingStep } from "./components/ui";
 import { PauseMenu } from "./components/ui/PauseMenu";
 import { SettingsMenu } from "./components/ui/SettingsMenu";
 import { useNavigate } from "react-router-dom";
@@ -20,6 +21,8 @@ interface GameProps {
 export function Game({ serverUrl, user }: GameProps) {
   const navigate = useNavigate();
   const [loadingState, setLoadingState] = useState<'connecting' | 'loading-world' | 'loading-chunks' | 'ready'>('connecting');
+  const [loadingSteps, setLoadingSteps] = useState<LoadingStep[]>([]);
+  const [blockpacksReady, setBlockpacksReady] = useState(false);
   const [connected, setConnected] = useState(false);
   const [spawnPoint, setSpawnPoint] = useState({ x: 0, y: 50, z: 0 });
   const [chunks, setChunks] = useState<Map<string, any>>(new Map());
@@ -107,6 +110,20 @@ export function Game({ serverUrl, user }: GameProps) {
     return () => cancelAnimationFrame(frameId);
   }, []);
 
+  // Callback to update loading steps
+  const updateLoadingStep = useCallback((name: string, status: LoadingStep['status'], detail?: string) => {
+    setLoadingSteps(prevSteps => {
+      const existingIndex = prevSteps.findIndex(s => s.name === name);
+      if (existingIndex >= 0) {
+        const newSteps = [...prevSteps];
+        newSteps[existingIndex] = { name, status, detail };
+        return newSteps;
+      } else {
+        return [...prevSteps, { name, status, detail }];
+      }
+    });
+  }, []);
+
   // Handle window focus/blur to prevent camera jumps
   useEffect(() => {
     const handleBlur = () => {
@@ -132,10 +149,15 @@ export function Game({ serverUrl, user }: GameProps) {
           setLoadingState('loading-world');
           setLoadingProgress(30);
         }
+      },
+      user,
+      updateLoadingStep, // Pass the loading step updater
+      () => {
+        // Blockpacks are ready!
+        console.log('[Game] Blockpacks ready, can initialize textures now');
+        setBlockpacksReady(true);
       }
     );
-    
-    network.setAuthenticatedUser(user);
     network.setOnWorldAssigned((spawn, serverSettings) => {
       setSpawnPoint(spawn);
       
@@ -195,14 +217,16 @@ export function Game({ serverUrl, user }: GameProps) {
       }
     }
     
-    // Update progress
+    // Update progress and loading step
     const chunkProgress = (loadedChunks / requiredChunks) * 40; // 40% of total progress
     setLoadingProgress(60 + chunkProgress);
+    updateLoadingStep('Loading terrain', 'loading', `${loadedChunks}/${requiredChunks} chunks loaded`);
     
     // If spawn chunk is loaded, we're good to go (player won't fall)
     if (loadedChunks >= 1) { // Just need at least the spawn chunk
       initialChunksLoadedRef.current = true;
       setLoadingProgress(100);
+      updateLoadingStep('Loading terrain', 'completed', `${loadedChunks} chunks ready`);
       // Start fade out after a brief moment
       setTimeout(() => {
         setLoadingState('ready');
@@ -216,7 +240,7 @@ export function Game({ serverUrl, user }: GameProps) {
         }, 600); // Wait for fade animation
       }, 200);
     }
-  }, [chunks, loadingState, spawnPoint]);
+  }, [chunks, loadingState, spawnPoint, updateLoadingStep]);
 
   // Track pointer lock state and smooth mouse movements
   useEffect(() => {
@@ -466,6 +490,7 @@ export function Game({ serverUrl, user }: GameProps) {
             message={getLoadingMessage()}
             progress={loadingProgress}
             showProgress={true}
+            steps={loadingSteps}
           />
         </div>
       )}
@@ -547,6 +572,7 @@ export function Game({ serverUrl, user }: GameProps) {
           chunks={chunks} 
           ambientOcclusionEnabled={ambientOcclusionEnabled} 
           shadowsEnabled={shadowsEnabled}
+          blockpacksReady={blockpacksReady}
         />
       </Canvas>
       </div>

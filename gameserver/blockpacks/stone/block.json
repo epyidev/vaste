@@ -1,0 +1,10 @@
+{
+  "stringId": "vaste:stone",
+  "name": "stone",
+  "displayName": "Stone",
+  "solid": true,
+  "transparent": false,
+  "textures": {
+    "all": "/blockpacks/stone/textures/stone.png"
+  }
+}

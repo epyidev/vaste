@@ -16,16 +16,26 @@ interface VoxelWorldProps {
   chunks: Map<string, ChunkData>;
   ambientOcclusionEnabled?: boolean;
   shadowsEnabled?: boolean;
+  blockpacksReady?: boolean;
 }
 
-export function VoxelWorld({ chunks, ambientOcclusionEnabled = true, shadowsEnabled = true }: VoxelWorldProps) {
+export function VoxelWorld({ chunks, ambientOcclusionEnabled = true, shadowsEnabled = true, blockpacksReady = false }: VoxelWorldProps) {
   const groupRef = useRef<THREE.Group>(null);
   const managerRef = useRef<ChunkManager | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const init = async () => {
-      console.log('[VoxelWorld] Initializing texture system...');
+      // Wait for blockpacks to be loaded before initializing textures
+      if (!blockpacksReady) {
+        console.log('[VoxelWorld] Waiting for blockpacks to be loaded...');
+        return;
+      }
+
+      console.log('[VoxelWorld] Blockpacks ready, initializing texture system...');
+      
+      // Blockpacks are now loaded by NetworkManager from server
+      // Now we can initialize texture system
       await textureManager.initialize();
       const texture = textureManager.getTexture();
       
@@ -51,7 +61,7 @@ export function VoxelWorld({ chunks, ambientOcclusionEnabled = true, shadowsEnab
         managerRef.current.dispose();
       }
     };
-  }, [ambientOcclusionEnabled]); // Recréer le manager seulement quand AO change
+  }, [ambientOcclusionEnabled, blockpacksReady]); // Re-initialize when blockpacks are ready
 
   // Mettre à jour les ombres sans recréer le manager
   useEffect(() => {

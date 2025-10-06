@@ -1,77 +1,66 @@
 import * as THREE from "three";
-import { getBlockName, BLOCK_REGISTRY, blockMapping } from "../data/BlockRegistry";
+import { getBlockName, getBlockRegistry, BlockDefinition } from "../data/BlockRegistry";
 
 /**
  * Fallback color for missing textures - bright magenta to be obvious
  */
 const FALLBACK_COLOR = 0xFF00FF; // Bright magenta/purple
 
-interface BlockConfig {
-  id?: number; // Deprecated - not used anymore
-  name: string;
-  textures: {
-    all?: string;
-    top?: string;
-    bottom?: string;
-    side?: string;
-  };
-}
-
 /**
- * TextureAtlasManager - Loads and manages block textures from blockpacks
+ * TextureAtlasManager - Loads and manages block textures from server
+ * Textures are loaded from blockpack definitions received from gameserver
  */
 export class TextureAtlasManager {
   private textures: Map<string, THREE.Texture> = new Map();
-  private blockConfigs: Map<string, BlockConfig> = new Map();
-  private loadedBlockpacks = new Set<string>();
+  private loadedBlocks = new Set<string>();
 
   /**
-   * Load a blockpack configuration and textures
+   * Load textures for a block from its registry definition
    */
-  async loadBlockpack(blockName: string): Promise<void> {
-    if (this.loadedBlockpacks.has(blockName)) {
+  async loadBlockTextures(blockName: string): Promise<void> {
+    if (this.loadedBlocks.has(blockName)) {
+      return;
+    }
+
+    // Find block in registry by name
+    const BLOCK_REGISTRY = getBlockRegistry();
+    let blockDef = null;
+    for (const [stringId, def] of BLOCK_REGISTRY) {
+      if (def.name === blockName) {
+        blockDef = def;
+        break;
+      }
+    }
+
+    if (!blockDef || !blockDef.textures) {
+      console.warn(`[TextureAtlas] No block definition or textures for "${blockName}"`);
       return;
     }
 
     try {
-      // Load block.json
-      const configPath = `/blockpacks/${blockName}/block.json`;
-      console.log(`[TextureAtlas] Loading config: ${configPath}`);
-      
-      const response = await fetch(configPath);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      const config: BlockConfig = await response.json();
-      this.blockConfigs.set(blockName, config);
-      
-      console.log(`[TextureAtlas] ✅ Config loaded for "${blockName}":`, config.textures);
-
-      // Load textures
       const loader = new THREE.TextureLoader();
       
       // Load "all" texture if exists
-      if (config.textures.all) {
-        await this.loadTexture(loader, `${blockName}_all`, config.textures.all);
+      if (blockDef.textures.all) {
+        await this.loadTexture(loader, `${blockName}_all`, blockDef.textures.all);
       }
       
       // Load face-specific textures
-      if (config.textures.top) {
-        await this.loadTexture(loader, `${blockName}_top`, config.textures.top);
+      if (blockDef.textures.top) {
+        await this.loadTexture(loader, `${blockName}_top`, blockDef.textures.top);
       }
-      if (config.textures.bottom) {
-        await this.loadTexture(loader, `${blockName}_bottom`, config.textures.bottom);
+      if (blockDef.textures.bottom) {
+        await this.loadTexture(loader, `${blockName}_bottom`, blockDef.textures.bottom);
       }
-      if (config.textures.side) {
-        await this.loadTexture(loader, `${blockName}_side`, config.textures.side);
+      if (blockDef.textures.side) {
+        await this.loadTexture(loader, `${blockName}_side`, blockDef.textures.side);
       }
 
-      this.loadedBlockpacks.add(blockName);
-      console.log(`[TextureAtlas] ✅ Blockpack "${blockName}" fully loaded`);
+      this.loadedBlocks.add(blockName);
+      console.log(`[TextureAtlas] ✅ Loaded textures for "${blockName}"`);
       
     } catch (error) {
-      console.error(`[TextureAtlas] ❌ Failed to load blockpack "${blockName}":`, error);
+      console.error(`[TextureAtlas] ❌ Failed to load textures for "${blockName}":`, error);
     }
   }
 
@@ -131,21 +120,23 @@ export class TextureAtlasManager {
   }
 
   /**
-   * Preload common blockpacks
+   * Preload all block textures from registry
+   * Should be called AFTER blockpacks are loaded from server
    */
-  async preloadBlockpacks(): Promise<void> {
+  async preloadBlockTextures(): Promise<void> {
     // Get all blocks from registry (except air)
+    const BLOCK_REGISTRY = getBlockRegistry();
     const blocksToLoad = Array.from(BLOCK_REGISTRY.values())
-      .filter(block => block.stringId !== "vaste:air")
-      .map(block => block.name);
+      .filter((block: BlockDefinition) => block.stringId !== "vaste:air")
+      .map((block: BlockDefinition) => block.name);
     
-    console.log("[TextureAtlas] Preloading blockpacks:", blocksToLoad);
+    console.log("[TextureAtlas] Preloading textures for blocks:", blocksToLoad);
     
     await Promise.all(
-      blocksToLoad.map(blockName => this.loadBlockpack(blockName))
+      blocksToLoad.map(blockName => this.loadBlockTextures(blockName))
     );
 
-    console.log(`[TextureAtlas] ✅ Loaded ${this.loadedBlockpacks.size} blockpacks`);
+    console.log(`[TextureAtlas] ✅ Loaded ${this.loadedBlocks.size} block textures`);
   }
 
   /**
@@ -187,9 +178,10 @@ export class TextureAtlasManager {
   dispose(): void {
     this.textures.forEach(texture => texture.dispose());
     this.textures.clear();
-    this.loadedBlockpacks.clear();
+    this.loadedBlocks.clear();
   }
 }
 
 // Singleton instance
 export const textureAtlas = new TextureAtlasManager();
+

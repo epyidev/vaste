@@ -16,15 +16,19 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 
 // Security middleware with custom CSP for WebSocket connections
+// In development, use a more permissive CSP to allow game server connections
+const isDevelopment = process.env.NODE_ENV !== 'production';
+
 app.use(helmet({
-  contentSecurityPolicy: {
+  contentSecurityPolicy: isDevelopment ? false : {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "blob:"],
-      connectSrc: ["'self'", "ws://localhost:25565", "wss://localhost:25565", "ws:", "wss:"],
-      fontSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "blob:", "http://*", "https://*"],
+      connectSrc: ["'self'", "ws://*", "wss://*", "http://*", "https://*"],
+      fontSrc: ["'self'", "data:"],
+      workerSrc: ["'self'", "blob:"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
       frameSrc: ["'none'"],

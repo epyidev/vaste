@@ -1,0 +1,10 @@
+{
+  "stringId": "vaste:sand",
+  "name": "sand",
+  "displayName": "Sand",
+  "solid": true,
+  "transparent": false,
+  "textures": {
+    "all": "/blockpacks/sand/textures/sand.png"
+  }
+}

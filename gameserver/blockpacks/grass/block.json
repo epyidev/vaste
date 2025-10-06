@@ -1,0 +1,12 @@
+{
+  "stringId": "vaste:grass",
+  "name": "grass",
+  "displayName": "Grass",
+  "solid": true,
+  "transparent": false,
+  "textures": {
+    "top": "/blockpacks/grass/textures/grass_top.png",
+    "side": "/blockpacks/grass/textures/grass_side.png",
+    "bottom": "/blockpacks/grass/textures/grass_bottom.png"
+  }
+}

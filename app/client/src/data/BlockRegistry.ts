@@ -1,81 +1,112 @@
 /**
- * Block Registry - String-Based Block System
+ * Block Registry - String-Based Block System with Server-Side Loading
  * 
- * DEVELOPER-FACING: Use string IDs only!
- * - To add a block: just use "namespace:name" format (e.g., "vaste:stone", "mymod:ruby")
- * - NO manual numeric IDs needed
+ * DEVELOPER-FACING: Blockpacks are managed server-side!
+ * - Each server can have its own blockpacks
+ * - Client downloads blockpacks from server on connection
+ * - Blocks are loaded dynamically from server data
+ * 
+ * Block definitions received from server include:
+ * {
+ *   "stringId": "namespace:name",     // e.g., "vaste:stone", "mymod:ruby"
+ *   "name": "stone",                   // Internal name
+ *   "displayName": "Stone",            // Human-readable name
+ *   "solid": true,                     // Is solid (blocks movement)
+ *   "transparent": false,              // Is transparent (affects rendering)
+ *   "textures": { ... }                // Texture definitions
+ * }
  * 
  * INTERNAL SYSTEM (automatic):
+ * - Receives blockpack data from gameserver via WebSocket
+ * - Loads textures from gameserver HTTP endpoint
  * - Numeric IDs are generated at runtime for network efficiency
  * - Client/server sync mapping table at connection
- * - World storage uses string IDs (future-proof, no conflicts)
- * 
- * String ID format: "namespace:blockname"
- * - Official blocks: "vaste:stone", "vaste:dirt", etc.
- * - Mod blocks: "mymod:custom_block", "othermod:special_ore", etc.
- * 
- * The mapping system (BlockMappingManager) handles:
- * - Auto-generation of temporary numeric IDs (for network packets)
- * - Synchronization between client and server
- * - Persistence of string IDs in world files
  */
 
 export interface BlockDefinition {
-  stringId: string;        // ONLY ID you need! e.g., "vaste:stone", "mymod:ruby"
+  stringId: string;        // e.g., "vaste:stone", "mymod:ruby"
   name: string;            // Internal name (e.g., "stone", "dirt")
   displayName: string;     // Human-readable name
   solid: boolean;
   transparent: boolean;
+  textures?: any;          // Texture configuration (loaded from block.json)
 }
 
 /**
- * Official block registry - Map<stringId, BlockDefinition>
- * Add blocks here using ONLY string IDs
+ * Dynamic block registry - Populated from server blockpacks
  */
-export const BLOCK_REGISTRY = new Map<string, BlockDefinition>([
-  ["vaste:air", {
+let BLOCK_REGISTRY = new Map<string, BlockDefinition>();
+let serverUrl: string = ''; // Will be set when loading from server
+
+/**
+ * Load blocks from server-provided blockpack data
+ * @param blockpacksData Array of block definitions from server
+ * @param gameServerUrl URL of the game server (for texture loading)
+ */
+export async function loadBlockpacksFromServer(
+  blockpacksData: any[],
+  gameServerUrl: string
+): Promise<void> {
+  console.log('[BlockRegistry] Loading blockpacks from server...');
+  console.log(`[BlockRegistry] Server URL: ${gameServerUrl}`);
+  
+  // Store server URL for texture loading
+  serverUrl = gameServerUrl;
+  
+  // Clear existing registry
+  BLOCK_REGISTRY.clear();
+  
+  // Always register air first (hardcoded special block)
+  BLOCK_REGISTRY.set("vaste:air", {
     stringId: "vaste:air",
     name: "air",
     displayName: "Air",
     solid: false,
     transparent: true,
-  }],
-  ["vaste:stone", {
-    stringId: "vaste:stone",
-    name: "stone",
-    displayName: "Stone",
-    solid: true,
-    transparent: false,
-  }],
-  ["vaste:dirt", {
-    stringId: "vaste:dirt",
-    name: "dirt",
-    displayName: "Dirt",
-    solid: true,
-    transparent: false,
-  }],
-  ["vaste:grass", {
-    stringId: "vaste:grass",
-    name: "grass",
-    displayName: "Grass",
-    solid: true,
-    transparent: false,
-  }],
-  ["vaste:wood", {
-    stringId: "vaste:wood",
-    name: "wood",
-    displayName: "Wood",
-    solid: true,
-    transparent: false,
-  }],
-  ["vaste:sand", {
-    stringId: "vaste:sand",
-    name: "sand",
-    displayName: "Sand",
-    solid: true,
-    transparent: false,
-  }],
-]);
+  });
+
+  let loadedCount = 0;
+
+  for (const blockData of blockpacksData) {
+    try {
+      // Validate required fields
+      if (!blockData.stringId || !blockData.name || !blockData.displayName) {
+        console.error(`[BlockRegistry] Invalid block data:`, blockData);
+        continue;
+      }
+
+      // Update texture paths to point to server
+      const textures = blockData.textures || {};
+      const updatedTextures: any = {};
+      
+      for (const [key, value] of Object.entries(textures)) {
+        if (typeof value === 'string') {
+          // Replace /blockpacks/ with server URL
+          updatedTextures[key] = value.replace('/blockpacks/', `${serverUrl}/blockpacks/`);
+        }
+      }
+
+      // Create block definition
+      const definition: BlockDefinition = {
+        stringId: blockData.stringId,
+        name: blockData.name,
+        displayName: blockData.displayName,
+        solid: blockData.solid !== undefined ? blockData.solid : true,
+        transparent: blockData.transparent !== undefined ? blockData.transparent : false,
+        textures: updatedTextures,
+      };
+
+      BLOCK_REGISTRY.set(definition.stringId, definition);
+      loadedCount++;
+
+      console.log(`[BlockRegistry] ✓ Loaded ${definition.stringId} (${definition.displayName})`);
+    } catch (error) {
+      console.error(`[BlockRegistry] Error loading block:`, error);
+    }
+  }
+
+  console.log(`[BlockRegistry] Successfully loaded ${loadedCount}/${blockpacksData.length} blockpacks from server`);
+}
 
 /**
  * BlockMappingManager - Handles runtime numeric ID assignment
@@ -91,15 +122,24 @@ export class BlockMappingManager {
   private nextNumericId: number = 1; // 0 reserved for air
 
   constructor() {
-    // Pre-register official blocks
-    this.registerBlock("vaste:air", 0); // Air always gets ID 0
+    // Air will be registered when blockpacks load from server
+  }
+
+  /**
+   * Initialize mapping manager after blocks are loaded
+   */
+  initializeFromRegistry(): void {
+    // Register air first (ID 0)
+    this.registerBlock("vaste:air", 0);
     
-    // Auto-register all official blocks with sequential IDs
+    // Auto-register all loaded blocks with sequential IDs
     for (const [stringId, _] of BLOCK_REGISTRY) {
       if (stringId !== "vaste:air") {
         this.registerBlock(stringId);
       }
     }
+    
+    console.log(`[BlockMapping] Initialized with ${this.stringToNumeric.size} blocks`);
   }
 
   /**
@@ -261,13 +301,16 @@ export function getAllBlocks(): BlockDefinition[] {
 }
 
 /**
- * Register a new block (for mods)
+ * Register a new block (for mods or dynamic loading)
  */
 export function registerBlock(definition: BlockDefinition): number {
   BLOCK_REGISTRY.set(definition.stringId, definition);
   return blockMapping.registerBlock(definition.stringId);
 }
 
-console.log('[BlockRegistry] Initialized with string-based system');
-console.log(`[BlockRegistry] Registered ${BLOCK_REGISTRY.size} official blocks`);
-console.log('[BlockRegistry] Block mappings:', blockMapping.exportMappingTable());
+/**
+ * Get the block registry (useful for debugging)
+ */
+export function getBlockRegistry(): Map<string, BlockDefinition> {
+  return BLOCK_REGISTRY;
+}

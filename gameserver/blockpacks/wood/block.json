@@ -1,0 +1,10 @@
+{
+  "stringId": "vaste:wood",
+  "name": "wood",
+  "displayName": "Wood",
+  "solid": true,
+  "transparent": false,
+  "textures": {
+    "all": "/blockpacks/wood/textures/wood.png"
+  }
+}
