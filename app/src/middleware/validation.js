@@ -29,7 +29,7 @@ export const validateRegister = [
   body('password')
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters long')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/)
     .withMessage('Password must contain at least one lowercase letter, one uppercase letter and one number'),
   
   handleValidationErrors
@@ -76,7 +76,7 @@ export const validatePasswordChange = [
   body('newPassword')
     .isLength({ min: 8 })
     .withMessage('New password must be at least 8 characters long')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/)
     .withMessage('New password must contain at least one lowercase letter, one uppercase letter and one number'),
   
   handleValidationErrors

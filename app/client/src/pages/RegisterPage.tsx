@@ -113,6 +113,14 @@ const RegisterPage: React.FC = () => {
       setAuthError("Username is required");
       return false;
     }
+    if (formData.username.length < 3 || formData.username.length > 50) {
+      setAuthError("Username must be between 3 and 50 characters");
+      return false;
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(formData.username)) {
+      setAuthError("Username can only contain letters, numbers, hyphens and underscores");
+      return false;
+    }
     if (!formData.email.trim()) {
       setAuthError("Email is required");
       return false;
@@ -121,12 +129,16 @@ const RegisterPage: React.FC = () => {
       setAuthError("Password is required");
       return false;
     }
-    if (formData.password !== formData.confirmPassword) {
-      setAuthError("Passwords do not match");
+    if (formData.password.length < 8) {
+      setAuthError("Password must be at least 8 characters long");
       return false;
     }
-    if (formData.password.length < 6) {
-      setAuthError("Password must be at least 6 characters long");
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(formData.password)) {
+      setAuthError("Password must contain at least one lowercase letter, one uppercase letter and one number");
+      return false;
+    }
+    if (formData.password !== formData.confirmPassword) {
+      setAuthError("Passwords do not match");
       return false;
     }
     return true;
