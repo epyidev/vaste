@@ -19,10 +19,6 @@ npm install
 # Copy environment file
 cp .env.example .env
 
-# Configure your database in .env
-# Then run migrations
-npm run migrate
-
 # Start server
 npm run dev
 ```
@@ -44,11 +40,6 @@ DB_NAME=vaste_backend
 DB_USER=your_username
 DB_PASSWORD=your_password
 JWT_SECRET=your-super-secure-jwt-secret
-```
-
-3. Run migrations:
-```bash
-npm run migrate
 ```
 
 ## API Endpoints
@@ -224,7 +215,6 @@ JWT_SECRET=your-very-secure-production-secret
 
 - `npm start`: Production start
 - `npm run dev`: Development start with nodemon
-- `npm run migrate`: Run database migrations
 
 ## Future Features
 
