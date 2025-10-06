@@ -19,11 +19,11 @@ call npm install
 cd ..
 
 REM Install game server dependencies
-if not exist "gameserver\node_modules" (
+if not exist "gameserver\vaste\node_modules" (
     echo Installing game server dependencies...
-    cd gameserver
+    cd gameserver\vaste
     call npm install
-    cd ..
+    cd ..\..
 )
 
 echo.
@@ -47,7 +47,7 @@ timeout /t 5 /nobreak > nul
 
 REM Start game server
 echo Starting game server on port 25565...
-start "Vaste Game Server" cmd /k "cd /d %~dp0gameserver && node server.js"
+start "Vaste Game Server" cmd /k "cd /d %~dp0gameserver\vaste && node server.js"
 
 echo.
 echo ====================================

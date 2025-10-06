@@ -14,7 +14,7 @@ const { CHUNK_SIZE } = require("./world");
 const { BlockpackManager } = require("./BlockpackManager");
 
 // Load server configuration first
-const CONFIG_FILE = path.join(__dirname, "server-config.json");
+const CONFIG_FILE = path.join(__dirname, "..", "server-config.json");  // Un niveau au-dessus
 let SERVER_CONFIG = {};
 
 function loadConfig() {

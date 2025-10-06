@@ -220,7 +220,7 @@ class VasteModSystem {
     async loadMods() {
         this.ensureLuaAvailable();
 
-        const modsPath = path.join(__dirname, 'mods');
+        const modsPath = path.join(__dirname, '..', 'mods');  // Un niveau au-dessus
         if (!fs.existsSync(modsPath)) {
             this.log('Mods directory not found, creating...');
             fs.mkdirSync(modsPath, { recursive: true });
@@ -247,7 +247,7 @@ class VasteModSystem {
     async loadMod(modName) {
         this.ensureLuaAvailable();
 
-        const modPath = path.join(__dirname, 'mods', modName);
+        const modPath = path.join(__dirname, '..', 'mods', modName);  // Un niveau au-dessus
         const manifestPath = path.join(modPath, '_heyvaste.lua');
 
         if (!fs.existsSync(manifestPath)) {
