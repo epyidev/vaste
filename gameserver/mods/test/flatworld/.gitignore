@@ -1,0 +1,13 @@
+# Ignore world JSON files
+*.json
+world.json
+worlds/*.json
+
+# Ignore temporary world files
+*.tmp
+*.bak
+*.backup
+
+# Ignore world data directories
+worlddata/
+saves/
