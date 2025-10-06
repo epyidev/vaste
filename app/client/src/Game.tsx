@@ -332,28 +332,27 @@ export function Game({ serverUrl, user }: GameProps) {
       // Handle ESC key
       if (e.key === 'Escape') {
         if (loadingState !== 'ready') return;
-        
+
         e.preventDefault();
         e.stopImmediatePropagation(); // Stop ALL other handlers
-        
+
+        // Priority 1: If settings are open, close settings and return to pause menu
         if (isSettingsOpen) {
+          handleCloseSettings();
           return;
         }
-        
+
+        // Priority 2: If pause menu is open, close it and resume game
         if (isPaused) {
+          handleResume();
           return;
         }
-        
-        // Priority 3: If playing with locked pointer, unlock cursor (no menu)
-        if (isPointerLocked) {
-          if (controlsRef.current) {
+
+        // Priority 3: If playing, open pause menu (and unlock pointer)
+        if (!isPaused && !isSettingsOpen) {
+          if (controlsRef.current && isPointerLocked) {
             controlsRef.current.unlock();
           }
-          return;
-        }
-        
-        // Priority 4: If cursor is unlocked but menu not open, open menu
-        if (!isPointerLocked && !isPaused) {
           setIsPaused(true);
           return;
         }
