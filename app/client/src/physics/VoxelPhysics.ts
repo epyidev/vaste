@@ -2,7 +2,6 @@ import * as THREE from 'three';
 
 /**
  * Physics and collision detection for voxel world
- * AABB collision system similar to Minecraft
  */
 
 const CHUNK_SIZE = 16;

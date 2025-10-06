@@ -136,15 +136,18 @@ export function PlayerController({
     const jump = keys.current.Space;
     const sprint = keys.current.ShiftLeft || keys.current.ShiftRight;
 
-    let targetSpeed = PHYSICS_CONFIG.walkSpeed;
-    if (sprint) {
-      targetSpeed = PHYSICS_CONFIG.sprintSpeed;
-    }
+    // Sprint only applies to forward movement
+    const forwardSpeed = sprint ? PHYSICS_CONFIG.sprintSpeed : PHYSICS_CONFIG.walkSpeed;
+    const backwardSpeed = PHYSICS_CONFIG.walkSpeed * 0.75; // 75% of walk speed (3.24 / 4.317)
+    const strafeSpeed = PHYSICS_CONFIG.walkSpeed * 0.765; // 76.5% of walk speed (3.30 / 4.317)
 
-    const inputX = (right ? 1 : 0) - (left ? 1 : 0);
-    const inputZ = (backward ? 1 : 0) - (forward ? 1 : 0);
+    // Build input vector with directional speeds (NOT normalized yet)
+    const inputX = (right ? strafeSpeed : 0) - (left ? strafeSpeed : 0);
+    const inputZ = (backward ? backwardSpeed : 0) - (forward ? forwardSpeed : 0);
 
     const inputVector = new THREE.Vector2(inputX, inputZ);
+    
+    // Normalize to prevent diagonal movement from being faster
     if (inputVector.length() > 0) {
       inputVector.normalize();
     }
@@ -172,9 +175,13 @@ export function PlayerController({
     cameraRight.crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0));
     cameraRight.normalize();
 
+    // After normalization, multiply by the dominant speed
+    // The normalized vector already accounts for direction mixing
+    const dominantSpeed = Math.max(Math.abs(inputX), Math.abs(inputZ));
+    
     const targetVelocity = new THREE.Vector3();
-    targetVelocity.addScaledVector(cameraRight, inputVector.x * targetSpeed);
-    targetVelocity.addScaledVector(cameraDirection, -inputVector.y * targetSpeed);
+    targetVelocity.addScaledVector(cameraRight, inputVector.x * dominantSpeed);
+    targetVelocity.addScaledVector(cameraDirection, -inputVector.y * dominantSpeed);
 
     // Get friction from the block beneath the player
     const targetFriction = getBlockFriction(currentGroundBlockId.current);
@@ -199,10 +206,9 @@ export function PlayerController({
     // Check if player is sliding (has significant velocity without input)
     const currentSpeed = Math.sqrt(velocity.current.x * velocity.current.x + velocity.current.z * velocity.current.z);
 
-    // Minecraft physics: simple and responsive
     if (onGround.current) {
       if (hasInput) {
-        // Player is actively moving - instant control like Minecraft
+        // Player is actively moving
         // No friction interference, no landing delay, no direction resistance
         // Just instant, responsive control (100% control when on ground)
         velocity.current.x = targetVelocity.x;
@@ -219,37 +225,52 @@ export function PlayerController({
         if (Math.abs(velocity.current.z) < 0.01) velocity.current.z = 0;
       }
     } else {
-      // In air - preserve momentum with limited control (Minecraft-like)
-      // Air friction is very low to maintain momentum
-      const airFriction = 0.99; // Almost no friction in air
+      // In air - smooth, limited control
+      // You can adjust trajectory but not change direction completely
       
       if (hasInput) {
-        // Player is actively controlling in air - limited influence
-        // Can only slightly adjust trajectory, not change direction completely
+        // Calculate how much the desired direction differs from current velocity
+        const currentVel = new THREE.Vector2(velocity.current.x, velocity.current.z);
+        const targetVel = new THREE.Vector2(targetVelocity.x, targetVelocity.z);
         
-        // Calculate how much control we have (much less than on ground)
-        const airInfluence = PHYSICS_CONFIG.airControl; // 0.2 = 20% of ground control
+        // Detect if this is mainly a camera rotation or WASD input
+        // If current and target speeds are similar, it's probably camera rotation
+        const currentSpeed = currentVel.length();
+        const targetSpeed = targetVel.length();
+        const speedRatio = currentSpeed > 0.1 ? Math.abs(targetSpeed - currentSpeed) / currentSpeed : 1.0;
         
-        // Apply very limited acceleration toward desired direction
-        const airAccel = PHYSICS_CONFIG.airAcceleration * dt * airInfluence;
+        // Calculate angle difference
+        let angleDiff = 0;
+        if (currentSpeed > 0.1 && targetSpeed > 0.1) {
+          const dot = currentVel.dot(targetVel) / (currentSpeed * targetSpeed);
+          angleDiff = Math.acos(Math.max(-1, Math.min(1, dot))); // Clamp to avoid NaN
+        }
         
-        // Only allow small adjustments to current velocity
-        const dx = targetVelocity.x - velocity.current.x;
-        const dz = targetVelocity.z - velocity.current.z;
+        // Determine control strength based on what changed
+        let airControlStrength;
         
-        // Cap the maximum change per frame for realistic air control
-        const maxChange = airAccel;
-        velocity.current.x += Math.max(-maxChange, Math.min(maxChange, dx));
-        velocity.current.z += Math.max(-maxChange, Math.min(maxChange, dz));
+        if (speedRatio < 0.3 && angleDiff > 0.5) {
+          // Mainly camera rotation (speed unchanged, large angle change)
+          // Very minimal control for camera rotation - almost none
+          airControlStrength = 0.005; // 0.5% = extremely slow camera-induced rotation
+        } else {
+          // WASD input change (speed change or small angle change)
+          // Reduced by 1/3 as requested: 0.1 → 0.067
+          airControlStrength = 0.067; // ~6.7% blend per frame
+        }
         
-        // Apply minimal air friction
-        velocity.current.x *= airFriction;
-        velocity.current.z *= airFriction;
+        // Smoothly interpolate toward target velocity
+        velocity.current.x += (targetVelocity.x - velocity.current.x) * airControlStrength;
+        velocity.current.z += (targetVelocity.z - velocity.current.z) * airControlStrength;
+        
+        // Apply very minimal air friction (98% = almost no slowdown)
+        velocity.current.x *= 0.98;
+        velocity.current.z *= 0.98;
       } else {
         // No input in air - preserve momentum with minimal air friction
         // This maintains your velocity when you release keys mid-jump
-        velocity.current.x *= airFriction;
-        velocity.current.z *= airFriction;
+        velocity.current.x *= 0.98;
+        velocity.current.z *= 0.98;
         
         // Don't stop - keep momentum (only stop if truly negligible)
         if (Math.abs(velocity.current.x) < 0.001) velocity.current.x = 0;
