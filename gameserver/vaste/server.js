@@ -226,6 +226,7 @@ class GameServer {
     this.httpServer = http.createServer((req, res) => {
       this.handleHttpRequest(req, res);
     });
+    this.httpServer.listen(HTTP_PORT);
 
     log(`Vaste server started on port ${PORT} (WebSocket) and ${HTTP_PORT} (HTTP)`);
     this.initializeServer();
