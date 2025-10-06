@@ -133,7 +133,7 @@ const RegisterPage: React.FC = () => {
       setAuthError("Password must be at least 8 characters long");
       return false;
     }
-    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(formData.password)) {
       setAuthError("Password must contain at least one lowercase letter, one uppercase letter and one number");
       return false;
     }
