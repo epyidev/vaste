@@ -5,6 +5,7 @@
 
 const path = require('path');
 const { World } = require('../../world');
+const { log, warn, error } = require('../../Logger');
 
 class WorldManager {
     constructor() {
@@ -36,7 +37,7 @@ class WorldManager {
         // Check if world already loaded
         let world = this.worlds.get(absPath);
         if (world) {
-            console.log(`[WorldManager] World already loaded: ${absPath}`);
+            log(`World already loaded: ${absPath}`);
             return world;
         }
         
@@ -56,15 +57,13 @@ class WorldManager {
             // Set as active world if no active world
             if (!this.activeWorld) {
                 this.activeWorld = world;
-                console.log(`[WorldManager] Set ${absPath} as active world`);
             }
             
-            console.log(`[WorldManager] Created/loaded world: ${absPath} (generator: ${generatorType})`);
             return world;
             
-        } catch (error) {
-            console.error(`[WorldManager] Error creating/loading world ${absPath}:`, error);
-            throw error;
+        } catch (err) {
+            error(`Error creating/loading world ${absPath}: ${err.message}`);
+            throw err;
         }
     }
 
@@ -106,12 +105,12 @@ class WorldManager {
         }
         
         if (!found) {
-            console.warn('[WorldManager] Attempting to set active world that is not managed');
+            warn('Attempting to set active world that is not managed');
             return;
         }
         
         this.activeWorld = world;
-        console.log(`[WorldManager] Active world set to: ${world.worldPath}`);
+        log(`Active world set to: ${world.worldPath}`);
     }
 
     /**
@@ -143,7 +142,7 @@ class WorldManager {
             }
         }
         
-        console.log(`[WorldManager] Filled ${count} blocks in world`);
+        log(`Filled ${count} blocks in world`);
     }
 
     /**
@@ -169,10 +168,10 @@ class WorldManager {
         // Clear active world if it was this one
         if (this.activeWorld === world) {
             this.activeWorld = null;
-            console.log('[WorldManager] Active world destroyed, no active world now');
+            log('Active world destroyed, no active world now');
         }
         
-        console.log(`[WorldManager] Destroyed world: ${absPath}`);
+        log(`Destroyed world: ${absPath}`);
         return true;
     }
 
@@ -180,7 +179,7 @@ class WorldManager {
      * Save all worlds
      */
     saveAll() {
-        console.log('[WorldManager] Saving all worlds...');
+        log('Saving all worlds...');
         for (const world of this.worlds.values()) {
             world.saveAll();
         }
@@ -190,7 +189,7 @@ class WorldManager {
      * Cleanup all worlds (on server shutdown)
      */
     cleanup() {
-        console.log('[WorldManager] Cleaning up all worlds...');
+        log('Cleaning up all worlds...');
         
         for (const world of this.worlds.values()) {
             world.destroy();

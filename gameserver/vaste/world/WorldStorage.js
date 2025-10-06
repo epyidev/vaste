@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { Region, REGION_SIZE } = require('./Region');
+const { log } = require("../Logger");
 
 class WorldStorage {
     /**
@@ -33,7 +34,7 @@ class WorldStorage {
                 fs.mkdirSync(this.regionsPath, { recursive: true });
             }
         } catch (error) {
-            console.error(`[WorldStorage] Error creating directories: ${error.message}`);
+            log(`Error creating directories: ${error.message}`, "ERROR");
             throw error;
         }
     }
@@ -79,10 +80,9 @@ class WorldStorage {
         try {
             const buffer = fs.readFileSync(filePath);
             const region = Region.deserialize(buffer, rx, ry, rz);
-            console.log(`[WorldStorage] Loaded region (${rx}, ${ry}, ${rz}) with ${region.chunks.size} chunks`);
             return region;
         } catch (error) {
-            console.error(`[WorldStorage] Error loading region (${rx}, ${ry}, ${rz}): ${error.message}`);
+            log(`Error loading region (${rx}, ${ry}, ${rz}): ${error.message}`, "ERROR");
             return null;
         }
     }
@@ -100,9 +100,9 @@ class WorldStorage {
             if (fs.existsSync(filePath)) {
                 try {
                     fs.unlinkSync(filePath);
-                    console.log(`[WorldStorage] Deleted empty region file (${region.rx}, ${region.ry}, ${region.rz})`);
+                    log(`Deleted empty region file (${region.rx}, ${region.ry}, ${region.rz})`, "INFO");
                 } catch (error) {
-                    console.error(`[WorldStorage] Error deleting region file: ${error.message}`);
+                    log(`Error deleting region file: ${error.message}`, "ERROR");
                 }
             }
             return true;
@@ -114,10 +114,9 @@ class WorldStorage {
             const buffer = region.serialize();
             fs.writeFileSync(filePath, buffer);
             region.dirty = false;
-            console.log(`[WorldStorage] Saved region (${region.rx}, ${region.ry}, ${region.rz}) with ${region.chunks.size} chunks`);
             return true;
         } catch (error) {
-            console.error(`[WorldStorage] Error saving region (${region.rx}, ${region.ry}, ${region.rz}): ${error.message}`);
+            log(`Error saving region (${region.rx}, ${region.ry}, ${region.rz}): ${error.message}`, "ERROR");
             return false;
         }
     }
@@ -139,9 +138,8 @@ class WorldStorage {
             };
             
             fs.writeFileSync(metadataPath, JSON.stringify(enrichedMetadata, null, 2));
-            console.log(`[WorldStorage] Saved world metadata with ${enrichedMetadata.blockMappings.length} block mappings`);
         } catch (error) {
-            console.error(`[WorldStorage] Error saving metadata: ${error.message}`);
+            log(`Error saving metadata: ${error.message}`, "ERROR");
         }
     }
 
@@ -173,15 +171,11 @@ class WorldStorage {
                 for (const { stringId, numericId } of metadata.blockMappings) {
                     blockMapping.registerBlock(stringId, numericId);
                 }
-                
-                console.log(`[WorldStorage] Restored ${metadata.blockMappings.length} block mappings from save file`);
-            } else {
-                console.log(`[WorldStorage] No block mappings in save file (old world format)`);
             }
             
             return metadata;
         } catch (error) {
-            console.error(`[WorldStorage] Error loading metadata: ${error.message}`);
+            log(`Error loading metadata: ${error.message}`, "ERROR");
             return null;
         }
     }
@@ -212,7 +206,7 @@ class WorldStorage {
                 }
             }
         } catch (error) {
-            console.error(`[WorldStorage] Error listing regions: ${error.message}`);
+            log(`Error listing regions: ${error.message}`, "ERROR");
         }
         
         return regions;

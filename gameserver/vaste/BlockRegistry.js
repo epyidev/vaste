@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { log, warn, error } = require('./Logger');
 
 /**
  * BlockRegistry - Server-side String-Based Block System
@@ -56,7 +57,7 @@ function loadBlockpacks() {
           
           // Validate required fields
           if (!blockData.stringId) {
-            console.warn(`[BlockRegistry] Block in ${entry.name}/ missing stringId, skipping`);
+            warn(`Block in ${entry.name}/ missing stringId, skipping`);
             continue;
           }
 
@@ -71,16 +72,15 @@ function loadBlockpacks() {
             ...blockData // Include any additional properties
           });
 
-          console.log(`[BlockRegistry] Loaded blockpack: ${blockData.stringId} from ${entry.name}/`);
-        } catch (error) {
-          console.error(`[BlockRegistry] Error loading block from ${entry.name}/block.json:`, error.message);
+        } catch (err) {
+          error(`Error loading block from ${entry.name}/block.json: ${err.message}`);
         }
       } else {
-        console.warn(`[BlockRegistry] Directory ${entry.name}/ has no block.json, skipping`);
+        warn(`Directory ${entry.name}/ has no block.json, skipping`);
       }
     }
-  } catch (error) {
-    console.error('[BlockRegistry] Error reading blockpacks directory:', error.message);
+  } catch (err) {
+    error(`Error reading blockpacks directory: ${err.message}`);
   }
 
   return BLOCK_REGISTRY;
@@ -113,8 +113,7 @@ class BlockMappingManager {
       }
     }
 
-    console.log(`[BlockRegistry] Initialized with ${BLOCK_REGISTRY.size} official blocks`);
-    console.log('[BlockRegistry] Mapping table:', this.exportMappingTable());
+    log(`Initialized with ${BLOCK_REGISTRY.size} official blocks`);
   }
 
   /**
@@ -151,7 +150,7 @@ class BlockMappingManager {
   getNumericId(stringId) {
     const numericId = this.stringToNumeric.get(stringId);
     if (numericId === undefined) {
-      console.warn(`[BlockMapping] Unknown string ID: ${stringId}, returning 0 (air)`);
+      warn(`[BlockMapping] Unknown string ID: ${stringId}, returning 0 (air)`);
       return 0; // Fallback to air
     }
     return numericId;
@@ -163,7 +162,7 @@ class BlockMappingManager {
   getStringId(numericId) {
     const stringId = this.numericToString.get(numericId);
     if (stringId === undefined) {
-      console.warn(`[BlockMapping] Unknown numeric ID: ${numericId}, returning vaste:air`);
+      warn(`[BlockMapping] Unknown numeric ID: ${numericId}, returning vaste:air`);
       return "vaste:air"; // Fallback to air
     }
     return stringId;

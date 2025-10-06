@@ -2,6 +2,8 @@
  * Vaste API - Event System
  */
 
+const { error } = require('../../Logger');
+
 class EventManager {
     constructor() {
         this.listeners = new Map(); // Map<eventName, Set<callback>>
@@ -35,8 +37,8 @@ class EventManager {
             for (const callback of listeners) {
                 try {
                     callback(...args);
-                } catch (error) {
-                    console.error(`[VASTE-API] Error in event listener for '${eventName}':`, error);
+                } catch (err) {
+                    error(`[VASTE-API] Error in event listener for '${eventName}': ${err.message}`);
                 }
             }
         }

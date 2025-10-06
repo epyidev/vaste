@@ -47,8 +47,8 @@ export async function loadBlockpacksFromServer(
   blockpacksData: any[],
   gameServerUrl: string
 ): Promise<void> {
-  console.log('[BlockRegistry] Loading blockpacks from server...');
-  console.log(`[BlockRegistry] Server URL: ${gameServerUrl}`);
+  console.log('Loading blockpacks from server...');
+  console.log(`Server URL: ${gameServerUrl}`);
   
   // Store server URL for texture loading
   serverUrl = gameServerUrl;
@@ -71,7 +71,7 @@ export async function loadBlockpacksFromServer(
     try {
       // Validate required fields
       if (!blockData.stringId || !blockData.name || !blockData.displayName) {
-        console.error(`[BlockRegistry] Invalid block data:`, blockData);
+        console.error(`Invalid block data:`, blockData);
         continue;
       }
 
@@ -99,13 +99,13 @@ export async function loadBlockpacksFromServer(
       BLOCK_REGISTRY.set(definition.stringId, definition);
       loadedCount++;
 
-      console.log(`[BlockRegistry] ✓ Loaded ${definition.stringId} (${definition.displayName})`);
+      console.log(`✓ Loaded ${definition.stringId} (${definition.displayName})`);
     } catch (error) {
-      console.error(`[BlockRegistry] Error loading block:`, error);
+      console.error(`Error loading block:`, error);
     }
   }
 
-  console.log(`[BlockRegistry] Successfully loaded ${loadedCount}/${blockpacksData.length} blockpacks from server`);
+  console.log(`Successfully loaded ${loadedCount}/${blockpacksData.length} blockpacks from server`);
 }
 
 /**

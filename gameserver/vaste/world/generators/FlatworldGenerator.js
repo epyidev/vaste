@@ -5,6 +5,7 @@
 
 const { Chunk, CHUNK_SIZE } = require('../Chunk');
 const { blockMapping } = require('../../BlockRegistry');
+const { log } = require('../../Logger');
 
 class FlatworldGenerator {
     /**
@@ -26,9 +27,6 @@ class FlatworldGenerator {
         this.stoneId = blockMapping.getNumericId('vaste:stone');
         this.dirtId = blockMapping.getNumericId('vaste:dirt');
         this.grassId = blockMapping.getNumericId('vaste:grass');
-        
-        console.log(`[FlatworldGenerator] Created with ${this.groundHeight} blocks of terrain`);
-        console.log(`[FlatworldGenerator] Block IDs: stone=${this.stoneId}, dirt=${this.dirtId}, grass=${this.grassId}`);
     }
 
     /**

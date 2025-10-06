@@ -3,6 +3,8 @@
  * Allows registering multiple generator types
  */
 
+const { log, warn } = require('../Logger');
+
 class GeneratorRegistry {
     constructor() {
         this.generators = new Map();
@@ -14,11 +16,8 @@ class GeneratorRegistry {
      * @param {Function} generatorClass - Generator class constructor
      */
     register(name, generatorClass) {
-        if (this.generators.has(name)) {
-            console.warn(`[GeneratorRegistry] Overwriting existing generator: ${name}`);
-        }
         this.generators.set(name, generatorClass);
-        console.log(`[GeneratorRegistry] Registered generator: ${name}`);
+        log(`Registered generator: ${name}`);
     }
 
     /**

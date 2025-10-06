@@ -9,12 +9,10 @@ const { World } = require('./World');
 const { WorldStorage } = require('./WorldStorage');
 const { GeneratorRegistry, registry } = require('./GeneratorRegistry');
 const { FlatworldGenerator } = require('./generators/FlatworldGenerator');
+const { log } = require('../Logger');
 
 // Register default generators
 registry.register('flatworld', FlatworldGenerator);
-
-console.log('[WorldSystem] Initialized world system');
-console.log('[WorldSystem] Registered generators:', registry.getNames().join(', '));
 
 module.exports = {
     // Core classes

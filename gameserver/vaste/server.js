@@ -12,6 +12,7 @@ const { VasteModSystem } = require("./VasteModSystem");
 const { ChunkProtocol } = require("./world/ChunkProtocol");
 const { CHUNK_SIZE } = require("./world");
 const { BlockpackManager } = require("./BlockpackManager");
+const { log, error } = require("./Logger");
 
 // Load server configuration first
 const CONFIG_FILE = path.join(__dirname, "..", "server-config.json");  // Un niveau au-dessus
@@ -53,19 +54,6 @@ const DEFAULT_RENDER_DISTANCE = 4; // chunks
 
 // Initialize Blockpack Manager
 const blockpackManager = new BlockpackManager(path.join(__dirname, "blockpacks"));
-
-// Logging utility
-function log(message, level = "INFO") {
-  const timestamp = new Date().toLocaleString("en-US", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-  console.log(`[VASTE] ${timestamp} ${level}: ${message}`);
-}
 
 // ASCII Art for VASTE
 function showVasteAscii() {
@@ -232,15 +220,11 @@ class GameServer {
 
     // WebSocket server
     this.wss = new WebSocket.Server({ port: PORT });
-    this.wss.on("listening", () => log(`WebSocket server listening on port ${PORT}`));
     this.wss.on("error", (err) => log(`WebSocket server error: ${err.message}`, "ERROR"));
 
     // HTTP server for blockpack assets (textures)
     this.httpServer = http.createServer((req, res) => {
       this.handleHttpRequest(req, res);
-    });
-    this.httpServer.listen(HTTP_PORT, () => {
-      log(`HTTP server for blockpack assets listening on port ${HTTP_PORT}`);
     });
 
     log(`Vaste server started on port ${PORT} (WebSocket) and ${HTTP_PORT} (HTTP)`);
@@ -281,9 +265,7 @@ class GameServer {
 
   async initializeServer() {
     try {
-      log("Initializing blockpack system...");
       await blockpackManager.initialize();
-      log(`Blockpacks ready: ${blockpackManager.getBlockpacksList().join(', ')}`);
 
       log("Loading mods...");
       await this.modSystem.loadMods();
@@ -300,13 +282,6 @@ class GameServer {
 
       // Check if any mod created a world
       const worldState = this.modSystem.getWorldState();
-      if (worldState && worldState.world) {
-        log(`Active world available: ${worldState.worldPath} (generator: ${worldState.generatorType})`);
-        log(`Spawn point: ${JSON.stringify(worldState.spawnPoint)}`);
-      } else {
-        log("WARNING: No active world created by mods. Players will not be able to spawn!", "WARN");
-        log("Mods should call CreateOrLoadWorld() to create a world", "WARN");
-      }
 
       this.setupWebSocketServer();
       log("Server initialization complete");
@@ -761,7 +736,6 @@ class GameServer {
     }
 
     try {
-      log(`Chunk request from ${player.username}: (${cx}, ${cy}, ${cz})`, "DEBUG");
       const chunk = player.world.getOrGenerateChunk(cx, cy, cz);
       
       if (!chunk.isEmpty()) {
@@ -774,9 +748,9 @@ class GameServer {
       } else {
         log(`Chunk (${cx}, ${cy}, ${cz}) is empty, not sending`, "DEBUG");
       }
-    } catch (error) {
-      log(`Error handling chunk request from ${player.username}: ${error.message}`, "ERROR");
-      console.error(error);
+    } catch (err) {
+      log(`Error handling chunk request from ${player.username}: ${err.message}`, "ERROR");
+      error(`Stack trace: ${err.stack}`);
     }
   }
 

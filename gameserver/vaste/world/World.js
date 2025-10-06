@@ -7,6 +7,7 @@ const { Chunk, CHUNK_SIZE } = require('./Chunk');
 const { Region, REGION_SIZE } = require('./Region');
 const { WorldStorage } = require('./WorldStorage');
 const { registry } = require('./GeneratorRegistry');
+const { log } = require('../Logger');
 
 class World {
     /**
@@ -47,10 +48,8 @@ class World {
         if (loadedMeta) {
             this.metadata = loadedMeta;
             this.spawnPoint = loadedMeta.spawnPoint || this.spawnPoint;
-            console.log(`[World] Loaded existing world at ${worldPath}`);
         } else {
             this.storage.saveMetadata(this.metadata);
-            console.log(`[World] Created new world at ${worldPath} with generator ${generatorType}`);
         }
         
         // Auto-save interval (every 30 seconds)
@@ -256,7 +255,7 @@ class World {
         }
         
         if (savedCount > 0) {
-            console.log(`[World] Saved ${savedCount} dirty regions`);
+            log(`[World] Saved ${savedCount} dirty regions`);
         }
         
         // Update last accessed time
@@ -279,7 +278,7 @@ class World {
         // Clear loaded regions
         this.regions.clear();
         
-        console.log(`[World] World destroyed: ${this.worldPath}`);
+        log(`[World] World destroyed: ${this.worldPath}`);
     }
 }
 

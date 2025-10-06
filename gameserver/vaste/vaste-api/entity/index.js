@@ -3,6 +3,7 @@
  */
 
 const { VasteEntity, VastePlayerEntity, VasteVector3 } = require('../types');
+const { log } = require('../../Logger');
 
 class EntityManager {
     constructor() {
@@ -39,7 +40,7 @@ class EntityManager {
         // Store world reference on entity
         entity.world = world;
         
-        console.log(`[EntityManager] Entity ${entity.id} assigned to world ${world.worldPath || 'unknown'}`);
+        log(`Entity ${entity.id} assigned to world ${world.worldPath || 'unknown'}`);
     }
 
     setEntityCoords(entity, position) {

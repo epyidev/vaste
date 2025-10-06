@@ -6,6 +6,7 @@
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
+const { log, warn, error } = require('./Logger');
 
 class BlockpackManager {
   constructor(blockpacksDir) {
@@ -19,11 +20,9 @@ class BlockpackManager {
    * Initialize blockpack manager - scan and load all blockpacks
    */
   async initialize() {
-    console.log('[BlockpackManager] Initializing...');
-    console.log(`[BlockpackManager] Scanning directory: ${this.blockpacksDir}`);
 
     if (!fsSync.existsSync(this.blockpacksDir)) {
-      console.error(`[BlockpackManager] Blockpacks directory not found: ${this.blockpacksDir}`);
+      error(`Blockpacks directory not found: ${this.blockpacksDir}`);
       throw new Error('Blockpacks directory not found');
     }
 
@@ -35,7 +34,7 @@ class BlockpackManager {
         .filter(entry => entry.isDirectory())
         .map(entry => entry.name);
 
-      console.log(`[BlockpackManager] Found ${blockpackDirs.length} potential blockpacks`);
+      log(`Found ${blockpackDirs.length} potential blockpacks`);
 
       let loadedCount = 0;
 
@@ -45,7 +44,7 @@ class BlockpackManager {
           
           // Check if block.json exists
           if (!fsSync.existsSync(blockJsonPath)) {
-            console.warn(`[BlockpackManager] Skipping ${blockName}: no block.json found`);
+            warn(`Skipping ${blockName}: no block.json found`);
             continue;
           }
 
@@ -55,8 +54,7 @@ class BlockpackManager {
 
           // Validate required fields
           if (!blockData.stringId || !blockData.name || !blockData.displayName) {
-            console.error(`[BlockpackManager] Invalid block.json in ${blockName}:`, 
-              'missing required fields (stringId, name, displayName)');
+            error(`Invalid block.json in ${blockName}: missing required fields (stringId, name, displayName)`);
             continue;
           }
 
@@ -65,24 +63,23 @@ class BlockpackManager {
           this.blockpacksList.push(blockName);
           loadedCount++;
 
-          console.log(`[BlockpackManager] ✓ Loaded ${blockData.stringId} (${blockData.displayName})`);
-        } catch (error) {
-          console.error(`[BlockpackManager] Error loading blockpack ${blockName}:`, error.message);
+          log(`✓ Loaded ${blockData.stringId} (${blockData.displayName})`);
+        } catch (err) {
+          error(`Error loading blockpack ${blockName}: ${err.message}`);
         }
       }
 
       this.initialized = true;
-      console.log(`[BlockpackManager] Successfully loaded ${loadedCount}/${blockpackDirs.length} blockpacks`);
-      console.log(`[BlockpackManager] Available blockpacks:`, this.blockpacksList);
+      log(`Successfully loaded ${loadedCount}/${blockpackDirs.length} blockpacks`);
 
       return {
         total: blockpackDirs.length,
         loaded: loadedCount,
         blockpacks: this.blockpacksList
       };
-    } catch (error) {
-      console.error('[BlockpackManager] Initialization error:', error);
-      throw error;
+    } catch (err) {
+      error(`Initialization error: ${err.message}`);
+      throw err;
     }
   }
 
