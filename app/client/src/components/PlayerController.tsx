@@ -176,8 +176,6 @@ export function PlayerController({
     targetVelocity.addScaledVector(cameraRight, inputVector.x * targetSpeed);
     targetVelocity.addScaledVector(cameraDirection, -inputVector.y * targetSpeed);
 
-    const controlFactor = onGround.current ? 1.0 : PHYSICS_CONFIG.airControl;
-
     // Get friction from the block beneath the player
     const targetFriction = getBlockFriction(currentGroundBlockId.current);
     
@@ -192,6 +190,7 @@ export function PlayerController({
       // This maintains sliding momentum when falling off edges
     }
     
+    // Friction only applies when no input (sliding/gliding)
     const friction = currentFriction.current;
     
     // Apply friction when on ground and no input
@@ -199,53 +198,15 @@ export function PlayerController({
 
     // Check if player is sliding (has significant velocity without input)
     const currentSpeed = Math.sqrt(velocity.current.x * velocity.current.x + velocity.current.z * velocity.current.z);
-    const isSliding = currentSpeed > 0.5;
 
-    // Directly set velocity for instant response (like Minecraft)
+    // Minecraft physics: simple and responsive
     if (onGround.current) {
       if (hasInput) {
-        // Player is trying to move
-        if (isSliding) {
-          // Player is sliding and trying to change direction
-          // Calculate angle between current velocity and desired direction
-          const currentVel = new THREE.Vector2(velocity.current.x, velocity.current.z);
-          const targetVel = new THREE.Vector2(targetVelocity.x, targetVelocity.z);
-          
-          if (currentVel.length() > 0.1 && targetVel.length() > 0.1) {
-            currentVel.normalize();
-            targetVel.normalize();
-            
-            // Dot product gives us how aligned the directions are (-1 = opposite, 1 = same)
-            const alignment = currentVel.dot(targetVel);
-            
-            // If trying to go opposite direction (alignment < 0), apply friction-based resistance
-            if (alignment < 0.5) {
-              // Fighting against the slide - friction slows down the transition
-              // Higher friction = harder to change direction
-              const resistanceFactor = 1.0 - (friction * 0.7); // friction 0.6 = 58% control, friction 0.98 = 31% control
-              const transitionSpeed = resistanceFactor * dt * 8.0; // How fast we can change direction
-              
-              // Blend current velocity toward target velocity based on resistance
-              velocity.current.x += (targetVelocity.x - velocity.current.x) * transitionSpeed;
-              velocity.current.z += (targetVelocity.z - velocity.current.z) * transitionSpeed;
-              
-              // Also apply friction to gradually slow down
-              velocity.current.x *= friction;
-              velocity.current.z *= friction;
-            } else {
-              // Going with or slightly against the slide - normal control
-              velocity.current.x = targetVelocity.x * controlFactor;
-              velocity.current.z = targetVelocity.z * controlFactor;
-            }
-          } else {
-            velocity.current.x = targetVelocity.x * controlFactor;
-            velocity.current.z = targetVelocity.z * controlFactor;
-          }
-        } else {
-          // Not sliding - normal instant control
-          velocity.current.x = targetVelocity.x * controlFactor;
-          velocity.current.z = targetVelocity.z * controlFactor;
-        }
+        // Player is actively moving - instant control like Minecraft
+        // No friction interference, no landing delay, no direction resistance
+        // Just instant, responsive control (100% control when on ground)
+        velocity.current.x = targetVelocity.x;
+        velocity.current.z = targetVelocity.z;
       } else {
         // Apply friction when no input - reduces velocity based on friction coefficient
         // Lower friction (0.0-0.5) = stops quickly
@@ -258,25 +219,41 @@ export function PlayerController({
         if (Math.abs(velocity.current.z) < 0.01) velocity.current.z = 0;
       }
     } else {
-      // In air, preserve momentum from sliding with slight air friction
+      // In air - preserve momentum with limited control (Minecraft-like)
+      // Air friction is very low to maintain momentum
+      const airFriction = 0.99; // Almost no friction in air
+      
       if (hasInput) {
-        // Player is actively controlling in air
-        const airAccel = PHYSICS_CONFIG.airAcceleration * dt;
-        const dx = (targetVelocity.x - velocity.current.x) * controlFactor;
-        const dz = (targetVelocity.z - velocity.current.z) * controlFactor;
+        // Player is actively controlling in air - limited influence
+        // Can only slightly adjust trajectory, not change direction completely
         
-        velocity.current.x += Math.max(-airAccel, Math.min(airAccel, dx));
-        velocity.current.z += Math.max(-airAccel, Math.min(airAccel, dz));
+        // Calculate how much control we have (much less than on ground)
+        const airInfluence = PHYSICS_CONFIG.airControl; // 0.2 = 20% of ground control
+        
+        // Apply very limited acceleration toward desired direction
+        const airAccel = PHYSICS_CONFIG.airAcceleration * dt * airInfluence;
+        
+        // Only allow small adjustments to current velocity
+        const dx = targetVelocity.x - velocity.current.x;
+        const dz = targetVelocity.z - velocity.current.z;
+        
+        // Cap the maximum change per frame for realistic air control
+        const maxChange = airAccel;
+        velocity.current.x += Math.max(-maxChange, Math.min(maxChange, dx));
+        velocity.current.z += Math.max(-maxChange, Math.min(maxChange, dz));
+        
+        // Apply minimal air friction
+        velocity.current.x *= airFriction;
+        velocity.current.z *= airFriction;
       } else {
-        // Player is gliding in air (from sliding off a block) - apply slight air friction
-        // Use a higher friction in air to simulate air resistance (but still preserve sliding)
-        const airFriction = Math.min(friction + 0.05, 0.98); // Slightly more friction in air
+        // No input in air - preserve momentum with minimal air friction
+        // This maintains your velocity when you release keys mid-jump
         velocity.current.x *= airFriction;
         velocity.current.z *= airFriction;
         
-        // Stop completely if velocity is very small
-        if (Math.abs(velocity.current.x) < 0.01) velocity.current.x = 0;
-        if (Math.abs(velocity.current.z) < 0.01) velocity.current.z = 0;
+        // Don't stop - keep momentum (only stop if truly negligible)
+        if (Math.abs(velocity.current.x) < 0.001) velocity.current.x = 0;
+        if (Math.abs(velocity.current.z) < 0.001) velocity.current.z = 0;
       }
     }
 
@@ -321,9 +298,8 @@ export function PlayerController({
 
       // Don't stop horizontal velocity when gliding - only stop if we hit a wall while grounded with input
       const expectedDelta = moveDelta.clone();
-      const wasOnGround = onGround.current;
       
-      // Update ground state first
+      // Update ground state
       onGround.current = result.onGround;
       currentGroundBlockId.current = result.groundBlockId;
       

@@ -15,19 +15,22 @@ export const PHYSICS_CONFIG = {
   sneakSpeed: 1.295,
 
   // Air control (percentage of ground control)
-  airControl: 0.2,
+  // 0.02 = 2% control - matches Minecraft exactly
+  // Can barely adjust trajectory in air
+  airControl: 0.02,
 
   // Acceleration (much higher for instant response)
   groundAcceleration: 100.0,
-  airAcceleration: 20.0,
+  airAcceleration: 1.0, // Very limited for realistic air control
 
   // Friction (applied per frame, not per second)
   groundFriction: 0.5,
-  airFriction: 0.98,
+  airFriction: 0.99, // Very low air friction to preserve momentum
 
-  // Gravity and jumping - tuned for Minecraft-like feel
+  // Gravity and jumping - exact Minecraft values
+  // Jump velocity of 9.0 allows jumping exactly 1.25 blocks
   gravity: 32.0,
-  jumpVelocity: 8.0,
+  jumpVelocity: 9.0,
 
   // Step height (auto-climb blocks)
   stepHeight: 0.6,
