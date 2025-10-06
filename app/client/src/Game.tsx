@@ -67,7 +67,9 @@ export function Game({ serverUrl, user }: GameProps) {
   const controlsRef = useRef<any>(null);
   const fpsCounterRef = useRef({ frames: 0, lastTime: performance.now() });
   const initialChunksLoadedRef = useRef(false);
-  const ignoreNextUnlockRef = useRef(false);
+  const justUnlockedRef = useRef(false); // Track if we just unlocked (transition period)
+  const canRelockRef = useRef(true); // Allow relocking only when safe
+  const closingMenuRef = useRef(false); // Track if we're closing the menu (shared between effects)
 
   // Shadow settings - Optimized for sharp voxel shadows
   const shadowSettings = shadowsEnabled 
@@ -255,27 +257,47 @@ export function Game({ serverUrl, user }: GameProps) {
 
     const handleLockChange = () => {
       const locked = document.pointerLockElement !== null;
-      console.log('[PointerLock] Changed:', {
+      console.log('[PointerLock] Changed3:', {
         locked,
         previousLockState,
         isPaused,
         isSettingsOpen,
         loadingState,
-        ignoreNextUnlock: ignoreNextUnlockRef.current
+        justUnlocked: justUnlockedRef.current,
+        canRelock: canRelockRef.current,
+        closingMenu: closingMenuRef.current
       });
       setIsPointerLocked(locked);
 
       // When unlocking during gameplay (not already in menu), open pause menu
-      if (!locked && previousLockState && loadingState === 'ready' && !isPaused && !isSettingsOpen && !ignoreNextUnlockRef.current) {
-        console.log('[PointerLock] Unlocked during gameplay, opening pause menu');
-        setIsPaused(true);
-      } else if (!locked && ignoreNextUnlockRef.current) {
-        console.log('[PointerLock] Unlock ignored (triggered by menu close)');
-      }
+      if (!locked && previousLockState && loadingState === 'ready' && !isPaused && !isSettingsOpen) {
+        // Only open menu if we're not in the "just unlocked" transition
+        if (!justUnlockedRef.current) {
+          console.log('[PointerLock] Unlocked during gameplay, opening pause menu');
+          setIsPaused(true);
+        } else {
+          console.log('[PointerLock] Unlock ignored (transition period)');
+        }
 
-      // Clear the ignore flag after unlock
-      if (!locked) {
-        ignoreNextUnlockRef.current = false;
+        // Mark transition and block relocking temporarily
+        justUnlockedRef.current = true;
+        canRelockRef.current = false;
+
+        // Allow relocking after browser finishes transition (100ms)
+        setTimeout(() => {
+          justUnlockedRef.current = false;
+          canRelockRef.current = true;
+          console.log('[PointerLock] Transition complete, can relock now');
+        }, 100);
+      } else if (locked && !previousLockState) {
+        console.log('[PointerLock] Locked successfully');
+
+        // If we were closing the menu and pointer is now locked, close it!
+        if (closingMenuRef.current && isPaused) {
+          console.log('[PointerLock] Closing menu after successful lock');
+          closingMenuRef.current = false;
+          setIsPaused(false);
+        }
       }
 
       // Update previous state
@@ -355,8 +377,13 @@ export function Game({ serverUrl, user }: GameProps) {
   // Pause menu handlers - defined early so they can be used in effects
   const handleResume = useCallback(() => {
     console.log('[Resume] Closing menu and locking pointer');
-    ignoreNextUnlockRef.current = true;
-    setIsPaused(false);
+
+    if (!canRelockRef.current) {
+      console.warn('[Resume] Too fast! Wait a moment before resuming.');
+      return;
+    }
+
+    closingMenuRef.current = true;
     if (controlsRef.current) {
       controlsRef.current.lock();
     }
@@ -446,36 +473,38 @@ export function Game({ serverUrl, user }: GameProps) {
     const handleKeyUp = (e: KeyboardEvent) => {
       // Re-lock pointer on ESC keyup if we closed the menu
       if (e.key === 'Escape') {
-        console.log('[ESC keyup] Detected, escKeyDownInMenu:', escKeyDownInMenu);
+        console.log('[ESC keyup] Detected, escKeyDownInMenu:', escKeyDownInMenu, 'canRelock:', canRelockRef.current);
         if (escKeyDownInMenu) {
           e.preventDefault();
           e.stopImmediatePropagation();
           escKeyDownInMenu = false;
 
-          // 🔥 CRITICAL: Reset pointer lock state to avoid SecurityError
-          console.log('[ESC keyup] Resetting and re-locking pointer');
-          ignoreNextUnlockRef.current = true;
-
-          try {
-            // Force unlock first (some browsers need a clean state)
-            document.exitPointerLock();
-
-            // Re-lock in next animation frame (preserves user gesture, more stable than setTimeout)
-            requestAnimationFrame(() => {
-              if (controlsRef.current) {
-                console.log('[ESC keyup] Requesting pointer lock in animation frame');
-                controlsRef.current.lock();
-              }
-            });
-          } catch (err) {
-            console.warn('[ESC keyup] Pointer lock failed:', err);
+          if (!canRelockRef.current) {
+            console.warn('[ESC keyup] Too fast! Wait a moment before closing the menu.');
+            return;
           }
 
-          // 🔥 Delay state change to avoid breaking the pointer lock context
-          setTimeout(() => {
-            console.log('[ESC keyup] Closing menu (delayed)');
-            setIsPaused(false);
-          }, 30);
+          // 🔥 Lock pointer and let pointerlockchange close the menu
+          closingMenuRef.current = true;
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              const canvas = document.querySelector('canvas');
+              if (canvas) {
+                console.log('[ESC keyup] Requesting pointer lock');
+                canvas.requestPointerLock()
+                  .then(() => {
+                    console.log('[ESC keyup] Pointer lock request succeeded');
+                    // Don't close menu here - wait for pointerlockchange
+                  })
+                  .catch((err) => {
+                    // Failed - keep menu open and reset flag
+                    console.warn('[ESC keyup] Pointer lock failed (too fast):', err.message);
+                    console.warn('[ESC keyup] Menu stays open - try again');
+                    closingMenuRef.current = false;
+                  });
+              }
+            }, 25);
+          });
           return;
         }
       }
