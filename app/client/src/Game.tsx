@@ -444,6 +444,7 @@ export function Game({ serverUrl, user }: GameProps) {
           onPositionChange={handlePlayerPositionChange}
           renderDistance={renderDistance}
           clearRequestedChunks={clearChunks}
+          chunks={chunks}
         />
         
         {/* Block Selection Outline */}

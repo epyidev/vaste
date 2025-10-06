@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { NetworkManager } from "../network";
+import { VoxelPhysics } from "../physics/VoxelPhysics";
+import { PHYSICS_CONFIG } from "../config/movement";
 
 interface PlayerControllerProps {
   controlsRef: React.RefObject<any>;
@@ -10,50 +12,56 @@ interface PlayerControllerProps {
   onPositionChange?: (pos: { x: number; y: number; z: number }) => void;
   renderDistance?: number;
   clearRequestedChunks?: boolean;
+  chunks: Map<string, any>;
 }
 
-const MOVE_SPEED = 4.317; // Walking speed
-const SPRINT_MULTIPLIER = 1.3;
-const JUMP_FORCE = 8;
-const GRAVITY = 25;
-const PLAYER_HEIGHT = 1.8;
-const PLAYER_RADIUS = 0.3;
 const CHUNK_SIZE = 16;
 
-export function PlayerController({ controlsRef, spawnPoint, networkManager, onPositionChange, renderDistance = 4, clearRequestedChunks }: PlayerControllerProps) {
+export function PlayerController({
+  controlsRef,
+  spawnPoint,
+  networkManager,
+  onPositionChange,
+  renderDistance = 4,
+  clearRequestedChunks,
+  chunks
+}: PlayerControllerProps) {
+  const position = useRef(new THREE.Vector3(
+    spawnPoint.x,
+    spawnPoint.y + PHYSICS_CONFIG.playerEyeHeight,
+    spawnPoint.z
+  ));
   const velocity = useRef(new THREE.Vector3(0, 0, 0));
-  const position = useRef(new THREE.Vector3(spawnPoint.x, spawnPoint.y + PLAYER_HEIGHT, spawnPoint.z));
   const keys = useRef<Record<string, boolean>>({});
   const onGround = useRef(false);
+
   const lastNetworkUpdate = useRef(0);
-  const requestedChunks = useRef(new Set<string>());
   const lastChunkUpdate = useRef(0);
   const lastPositionUpdate = useRef(0);
+  const requestedChunks = useRef(new Set<string>());
 
   useEffect(() => {
-    position.current.set(spawnPoint.x, spawnPoint.y + PLAYER_HEIGHT, spawnPoint.z);
-    
-    // Request initial chunks around spawn point
+    position.current.set(
+      spawnPoint.x,
+      spawnPoint.y + PHYSICS_CONFIG.playerEyeHeight,
+      spawnPoint.z
+    );
+    velocity.current.set(0, 0, 0);
+
     if (networkManager) {
-      console.log(`[PlayerController] Requesting chunks around spawn point (${spawnPoint.x}, ${spawnPoint.y}, ${spawnPoint.z})`);
       requestChunksAroundPlayer(spawnPoint.x, spawnPoint.y, spawnPoint.z);
     }
   }, [spawnPoint, networkManager]);
 
-  // Clear requested chunks when requested
   useEffect(() => {
     if (clearRequestedChunks) {
-      console.log('[PlayerController] Clearing requested chunks');
       requestedChunks.current.clear();
-      
-      // Also cancel pending network requests
       if (networkManager) {
         networkManager.cancelPendingChunkRequests();
       }
     }
   }, [clearRequestedChunks, networkManager]);
 
-  // Request chunks around player position
   const requestChunksAroundPlayer = (x: number, y: number, z: number) => {
     if (!networkManager) return;
 
@@ -61,9 +69,6 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager, onPo
     const playerChunkY = Math.floor(y / CHUNK_SIZE);
     const playerChunkZ = Math.floor(z / CHUNK_SIZE);
 
-    console.log(`[PlayerController] Player chunk: (${playerChunkX}, ${playerChunkY}, ${playerChunkZ})`);
-
-    // Generate all chunk positions within render distance
     const chunksToRequest: Array<{ cx: number; cy: number; cz: number; distance: number }> = [];
 
     for (let cx = playerChunkX - renderDistance; cx <= playerChunkX + renderDistance; cx++) {
@@ -73,11 +78,9 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager, onPo
           const dy = cy - playerChunkY;
           const dz = cz - playerChunkZ;
           const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          
+
           if (distance <= renderDistance) {
             const chunkKey = `${cx},${cy},${cz}`;
-            
-            // Only add if not already requested
             if (!requestedChunks.current.has(chunkKey)) {
               chunksToRequest.push({ cx, cy, cz, distance });
             }
@@ -86,27 +89,17 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager, onPo
       }
     }
 
-    // Sort chunks by distance (closest first) - spiral pattern
     chunksToRequest.sort((a, b) => a.distance - b.distance);
 
-    // Request chunks in order of proximity
-    let requestCount = 0;
     for (const chunk of chunksToRequest) {
       networkManager.requestChunk(chunk.cx, chunk.cy, chunk.cz);
       requestedChunks.current.add(`${chunk.cx},${chunk.cy},${chunk.cz}`);
-      requestCount++;
-    }
-
-    if (requestCount > 0) {
-      console.log(`[PlayerController] Requested ${requestCount} new chunks (sorted by distance)`);
     }
   };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       keys.current[e.code] = true;
-      
-      // Prevent space from scrolling
       if (e.code === "Space") {
         e.preventDefault();
       }
@@ -131,10 +124,8 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager, onPo
     const camera = controlsRef.current.getObject();
     if (!camera) return;
 
-    // Limit delta to prevent large jumps
     const dt = Math.min(delta, 0.1);
 
-    // Get movement input
     const forward = keys.current.KeyW || keys.current.ArrowUp;
     const backward = keys.current.KeyS || keys.current.ArrowDown;
     const left = keys.current.KeyA || keys.current.ArrowLeft;
@@ -142,51 +133,101 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager, onPo
     const jump = keys.current.Space;
     const sprint = keys.current.ShiftLeft || keys.current.ShiftRight;
 
-    // Calculate movement direction
-    const direction = new THREE.Vector3();
-    const frontVector = new THREE.Vector3(0, 0, (backward ? 1 : 0) - (forward ? 1 : 0));
-    const sideVector = new THREE.Vector3((left ? 1 : 0) - (right ? 1 : 0), 0, 0);
+    let targetSpeed = PHYSICS_CONFIG.walkSpeed;
+    if (sprint) {
+      targetSpeed = PHYSICS_CONFIG.sprintSpeed;
+    }
 
-    direction
-      .subVectors(frontVector, sideVector)
-      .normalize()
-      .multiplyScalar(MOVE_SPEED * (sprint ? SPRINT_MULTIPLIER : 1));
+    const inputX = (right ? 1 : 0) - (left ? 1 : 0);
+    const inputZ = (backward ? 1 : 0) - (forward ? 1 : 0);
 
-    // Apply camera rotation to movement direction
-    direction.applyEuler(camera.rotation);
-    direction.y = 0; // Don't move up/down based on camera angle
+    const inputVector = new THREE.Vector2(inputX, inputZ);
+    if (inputVector.length() > 0) {
+      inputVector.normalize();
+    }
 
-    // Apply horizontal movement
-    velocity.current.x = direction.x;
-    velocity.current.z = direction.z;
+    const cameraDirection = new THREE.Vector3();
+    camera.getWorldDirection(cameraDirection);
+    cameraDirection.y = 0;
+    cameraDirection.normalize();
 
-    // Apply gravity
-    velocity.current.y -= GRAVITY * dt;
+    const cameraRight = new THREE.Vector3();
+    cameraRight.crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0));
+    cameraRight.normalize();
 
-    // Jump
+    const targetVelocity = new THREE.Vector3();
+    targetVelocity.addScaledVector(cameraRight, inputVector.x * targetSpeed);
+    targetVelocity.addScaledVector(cameraDirection, -inputVector.y * targetSpeed);
+
+    const controlFactor = onGround.current ? 1.0 : PHYSICS_CONFIG.airControl;
+
+    // Directly set velocity for instant response (like Minecraft)
+    if (onGround.current) {
+      velocity.current.x = targetVelocity.x * controlFactor;
+      velocity.current.z = targetVelocity.z * controlFactor;
+    } else {
+      // In air, blend toward target velocity
+      const airAccel = PHYSICS_CONFIG.airAcceleration * dt;
+      const dx = (targetVelocity.x - velocity.current.x) * controlFactor;
+      const dz = (targetVelocity.z - velocity.current.z) * controlFactor;
+      
+      velocity.current.x += Math.max(-airAccel, Math.min(airAccel, dx));
+      velocity.current.z += Math.max(-airAccel, Math.min(airAccel, dz));
+    }
+
+    velocity.current.y -= PHYSICS_CONFIG.gravity * dt;
+
     if (jump && onGround.current) {
-      velocity.current.y = JUMP_FORCE;
-      onGround.current = false;
+      velocity.current.y = PHYSICS_CONFIG.jumpVelocity;
     }
 
-    // Update position
-    position.current.x += velocity.current.x * dt;
-    position.current.y += velocity.current.y * dt;
-    position.current.z += velocity.current.z * dt;
+    const moveDelta = velocity.current.clone().multiplyScalar(dt);
 
-    // Simple ground collision
-    const groundLevel = spawnPoint.y + PLAYER_HEIGHT;
-    if (position.current.y < groundLevel) {
-      position.current.y = groundLevel;
-      velocity.current.y = 0;
-      onGround.current = true;
+    const playerFeetY = position.current.y - PHYSICS_CONFIG.playerEyeHeight;
+
+    // If no chunks loaded, use simple physics without collision
+    if (chunks.size === 0) {
+      position.current.add(moveDelta);
+      
+      // Simple ground check at spawn level
+      const groundLevel = spawnPoint.y;
+      if (position.current.y - PHYSICS_CONFIG.playerEyeHeight < groundLevel) {
+        position.current.y = groundLevel + PHYSICS_CONFIG.playerEyeHeight;
+        velocity.current.y = 0;
+        onGround.current = true;
+      } else {
+        onGround.current = false;
+      }
+    } else {
+      // Use proper collision detection
+      const result = VoxelPhysics.sweepAABB(
+        chunks,
+        new THREE.Vector3(position.current.x, playerFeetY, position.current.z),
+        moveDelta,
+        PHYSICS_CONFIG.playerWidth,
+        PHYSICS_CONFIG.playerHeight
+      );
+
+      position.current.set(
+        result.position.x,
+        result.position.y + PHYSICS_CONFIG.playerEyeHeight,
+        result.position.z
+      );
+
+      // sweepAABB returns moveDelta (not velocity), so we need to check what happened
+      // If movement was blocked, zero the velocity in that axis
+      const expectedDelta = moveDelta.clone();
+      if (Math.abs(result.velocity.x - expectedDelta.x) > 0.001) velocity.current.x = 0;
+      if (Math.abs(result.velocity.z - expectedDelta.z) > 0.001) velocity.current.z = 0;
+      if (Math.abs(result.velocity.y - expectedDelta.y) > 0.001) velocity.current.y = 0;
+      
+      onGround.current = result.onGround;
     }
 
-    // Update camera position
     camera.position.copy(position.current);
 
-    // Update position for HUD (throttled to ~5 times per second)
     const now = Date.now();
+
     if (onPositionChange && now - lastPositionUpdate.current > 200) {
       onPositionChange({
         x: position.current.x,
@@ -196,13 +237,11 @@ export function PlayerController({ controlsRef, spawnPoint, networkManager, onPo
       lastPositionUpdate.current = now;
     }
 
-    // Request chunks as player moves (every 500ms)
     if (networkManager && now - lastChunkUpdate.current > 500) {
       requestChunksAroundPlayer(position.current.x, position.current.y, position.current.z);
       lastChunkUpdate.current = now;
     }
 
-    // Send position to server (throttled to ~10 times per second)
     if (networkManager && now - lastNetworkUpdate.current > 100) {
       networkManager.sendMessage({
         type: "player_move",
