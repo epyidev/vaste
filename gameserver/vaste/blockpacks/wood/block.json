@@ -4,6 +4,7 @@
   "displayName": "Wood",
   "solid": true,
   "transparent": false,
+  "friction": 0.6,
   "textures": {
     "all": "/blockpacks/wood/textures/wood.png"
   }

@@ -29,6 +29,7 @@ export interface BlockDefinition {
   displayName: string;     // Human-readable name
   solid: boolean;
   transparent: boolean;
+  friction?: number;       // Friction coefficient (0-1, higher = more slippery)
   textures?: any;          // Texture configuration (loaded from block.json)
 }
 
@@ -93,6 +94,7 @@ export async function loadBlockpacksFromServer(
         displayName: blockData.displayName,
         solid: blockData.solid !== undefined ? blockData.solid : true,
         transparent: blockData.transparent !== undefined ? blockData.transparent : false,
+        friction: blockData.friction !== undefined ? blockData.friction : 0.6,
         textures: updatedTextures,
       };
 
@@ -291,6 +293,20 @@ export function isBlockTransparent(stringIdOrNumeric: string | number): boolean 
     
   const block = BLOCK_REGISTRY.get(stringId);
   return block?.transparent || true;
+}
+
+/**
+ * Get friction coefficient of a block
+ * Returns a value between 0 and 1, where higher values mean more slippery
+ * Default is 0.6 for most blocks
+ */
+export function getBlockFriction(stringIdOrNumeric: string | number): number {
+  const stringId = typeof stringIdOrNumeric === 'number'
+    ? blockMapping.getStringId(stringIdOrNumeric)
+    : stringIdOrNumeric;
+    
+  const block = BLOCK_REGISTRY.get(stringId);
+  return block?.friction !== undefined ? block.friction : 0.6;
 }
 
 /**

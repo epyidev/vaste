@@ -113,7 +113,7 @@ export class VoxelPhysics {
 
   /**
    * Sweep AABB along velocity vector and resolve collisions
-   * Returns final position and whether player is on ground
+   * Returns final position, whether player is on ground, and the block ID beneath the player
    */
   static sweepAABB(
     chunks: Map<string, any>,
@@ -121,10 +121,11 @@ export class VoxelPhysics {
     velocity: THREE.Vector3,
     width: number,
     height: number
-  ): { position: THREE.Vector3; onGround: boolean; velocity: THREE.Vector3 } {
+  ): { position: THREE.Vector3; onGround: boolean; velocity: THREE.Vector3; groundBlockId: number } {
     const newPos = position.clone().add(velocity);
     const finalVelocity = velocity.clone();
     let onGround = false;
+    let groundBlockId = 0;
 
     // Check if we can move to new position
     const playerAABB = this.createAABB(newPos.x, newPos.y, newPos.z, width, height);
@@ -132,7 +133,7 @@ export class VoxelPhysics {
 
     // If no collisions, move freely
     if (collisionBlocks.length === 0) {
-      return { position: newPos, onGround: false, velocity: finalVelocity };
+      return { position: newPos, onGround: false, velocity: finalVelocity, groundBlockId: 0 };
     }
 
     // Simple collision resolution: move axis by axis
@@ -180,6 +181,16 @@ export class VoxelPhysics {
       }
     }
 
-    return { position: result, onGround, velocity: finalVelocity };
+    // Get the block ID beneath the player (for friction)
+    if (onGround) {
+      groundBlockId = this.getBlockAt(
+        chunks,
+        Math.floor(result.x),
+        Math.floor(result.y - 0.1), // Slightly below feet
+        Math.floor(result.z)
+      );
+    }
+
+    return { position: result, onGround, velocity: finalVelocity, groundBlockId };
   }
 }

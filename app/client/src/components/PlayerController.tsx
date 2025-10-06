@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { NetworkManager } from "../network";
 import { VoxelPhysics } from "../physics/VoxelPhysics";
 import { PHYSICS_CONFIG } from "../config/movement";
+import { getBlockFriction } from "../data/BlockRegistry";
 
 interface PlayerControllerProps {
   controlsRef: React.RefObject<any>;
@@ -34,6 +35,8 @@ export function PlayerController({
   const velocity = useRef(new THREE.Vector3(0, 0, 0));
   const keys = useRef<Record<string, boolean>>({});
   const onGround = useRef(false);
+  const currentGroundBlockId = useRef(0);
+  const currentFriction = useRef(0.6); // Smoothed friction value
 
   const lastNetworkUpdate = useRef(0);
   const lastChunkUpdate = useRef(0);
@@ -175,18 +178,106 @@ export function PlayerController({
 
     const controlFactor = onGround.current ? 1.0 : PHYSICS_CONFIG.airControl;
 
+    // Get friction from the block beneath the player
+    const targetFriction = getBlockFriction(currentGroundBlockId.current);
+    
+    // Smooth friction transitions to avoid abrupt changes when moving between blocks
+    // This prevents sudden stops when sliding from one block to another
+    const frictionBlendSpeed = 5.0; // How fast friction adapts (lower = smoother)
+    if (onGround.current) {
+      // Gradually blend toward target friction
+      currentFriction.current += (targetFriction - currentFriction.current) * Math.min(1.0, frictionBlendSpeed * dt);
+    } else {
+      // In air, keep the friction from the last ground block
+      // This maintains sliding momentum when falling off edges
+    }
+    
+    const friction = currentFriction.current;
+    
+    // Apply friction when on ground and no input
+    const hasInput = inputVector.length() > 0;
+
+    // Check if player is sliding (has significant velocity without input)
+    const currentSpeed = Math.sqrt(velocity.current.x * velocity.current.x + velocity.current.z * velocity.current.z);
+    const isSliding = currentSpeed > 0.5;
+
     // Directly set velocity for instant response (like Minecraft)
     if (onGround.current) {
-      velocity.current.x = targetVelocity.x * controlFactor;
-      velocity.current.z = targetVelocity.z * controlFactor;
+      if (hasInput) {
+        // Player is trying to move
+        if (isSliding) {
+          // Player is sliding and trying to change direction
+          // Calculate angle between current velocity and desired direction
+          const currentVel = new THREE.Vector2(velocity.current.x, velocity.current.z);
+          const targetVel = new THREE.Vector2(targetVelocity.x, targetVelocity.z);
+          
+          if (currentVel.length() > 0.1 && targetVel.length() > 0.1) {
+            currentVel.normalize();
+            targetVel.normalize();
+            
+            // Dot product gives us how aligned the directions are (-1 = opposite, 1 = same)
+            const alignment = currentVel.dot(targetVel);
+            
+            // If trying to go opposite direction (alignment < 0), apply friction-based resistance
+            if (alignment < 0.5) {
+              // Fighting against the slide - friction slows down the transition
+              // Higher friction = harder to change direction
+              const resistanceFactor = 1.0 - (friction * 0.7); // friction 0.6 = 58% control, friction 0.98 = 31% control
+              const transitionSpeed = resistanceFactor * dt * 8.0; // How fast we can change direction
+              
+              // Blend current velocity toward target velocity based on resistance
+              velocity.current.x += (targetVelocity.x - velocity.current.x) * transitionSpeed;
+              velocity.current.z += (targetVelocity.z - velocity.current.z) * transitionSpeed;
+              
+              // Also apply friction to gradually slow down
+              velocity.current.x *= friction;
+              velocity.current.z *= friction;
+            } else {
+              // Going with or slightly against the slide - normal control
+              velocity.current.x = targetVelocity.x * controlFactor;
+              velocity.current.z = targetVelocity.z * controlFactor;
+            }
+          } else {
+            velocity.current.x = targetVelocity.x * controlFactor;
+            velocity.current.z = targetVelocity.z * controlFactor;
+          }
+        } else {
+          // Not sliding - normal instant control
+          velocity.current.x = targetVelocity.x * controlFactor;
+          velocity.current.z = targetVelocity.z * controlFactor;
+        }
+      } else {
+        // Apply friction when no input - reduces velocity based on friction coefficient
+        // Lower friction (0.0-0.5) = stops quickly
+        // Higher friction (0.5-1.0) = slides more
+        velocity.current.x *= friction;
+        velocity.current.z *= friction;
+        
+        // Stop completely if velocity is very small
+        if (Math.abs(velocity.current.x) < 0.01) velocity.current.x = 0;
+        if (Math.abs(velocity.current.z) < 0.01) velocity.current.z = 0;
+      }
     } else {
-      // In air, blend toward target velocity
-      const airAccel = PHYSICS_CONFIG.airAcceleration * dt;
-      const dx = (targetVelocity.x - velocity.current.x) * controlFactor;
-      const dz = (targetVelocity.z - velocity.current.z) * controlFactor;
-      
-      velocity.current.x += Math.max(-airAccel, Math.min(airAccel, dx));
-      velocity.current.z += Math.max(-airAccel, Math.min(airAccel, dz));
+      // In air, preserve momentum from sliding with slight air friction
+      if (hasInput) {
+        // Player is actively controlling in air
+        const airAccel = PHYSICS_CONFIG.airAcceleration * dt;
+        const dx = (targetVelocity.x - velocity.current.x) * controlFactor;
+        const dz = (targetVelocity.z - velocity.current.z) * controlFactor;
+        
+        velocity.current.x += Math.max(-airAccel, Math.min(airAccel, dx));
+        velocity.current.z += Math.max(-airAccel, Math.min(airAccel, dz));
+      } else {
+        // Player is gliding in air (from sliding off a block) - apply slight air friction
+        // Use a higher friction in air to simulate air resistance (but still preserve sliding)
+        const airFriction = Math.min(friction + 0.05, 0.98); // Slightly more friction in air
+        velocity.current.x *= airFriction;
+        velocity.current.z *= airFriction;
+        
+        // Stop completely if velocity is very small
+        if (Math.abs(velocity.current.x) < 0.01) velocity.current.x = 0;
+        if (Math.abs(velocity.current.z) < 0.01) velocity.current.z = 0;
+      }
     }
 
     velocity.current.y -= PHYSICS_CONFIG.gravity * dt;
@@ -228,14 +319,39 @@ export function PlayerController({
         result.position.z
       );
 
-      // sweepAABB returns moveDelta (not velocity), so we need to check what happened
-      // If movement was blocked, zero the velocity in that axis
+      // Don't stop horizontal velocity when gliding - only stop if we hit a wall while grounded with input
       const expectedDelta = moveDelta.clone();
-      if (Math.abs(result.velocity.x - expectedDelta.x) > 0.001) velocity.current.x = 0;
-      if (Math.abs(result.velocity.z - expectedDelta.z) > 0.001) velocity.current.z = 0;
-      if (Math.abs(result.velocity.y - expectedDelta.y) > 0.001) velocity.current.y = 0;
+      const wasOnGround = onGround.current;
       
+      // Update ground state first
       onGround.current = result.onGround;
+      currentGroundBlockId.current = result.groundBlockId;
+      
+      // Handle velocity after collision
+      // Only zero horizontal velocity if:
+      // 1. Player is actively trying to move into a wall (has input)
+      // 2. OR player hit a wall while NOT sliding (low horizontal velocity)
+      const isSliding = !hasInput && (Math.abs(velocity.current.x) > 0.1 || Math.abs(velocity.current.z) > 0.1);
+      
+      if (Math.abs(result.velocity.x - expectedDelta.x) > 0.001) {
+        // X collision detected
+        if (hasInput || !isSliding) {
+          velocity.current.x = 0;
+        }
+        // If sliding, keep velocity to allow sliding off edges
+      }
+      
+      if (Math.abs(result.velocity.z - expectedDelta.z) > 0.001) {
+        // Z collision detected
+        if (hasInput || !isSliding) {
+          velocity.current.z = 0;
+        }
+        // If sliding, keep velocity to allow sliding off edges
+      }
+      
+      if (Math.abs(result.velocity.y - expectedDelta.y) > 0.001) {
+        velocity.current.y = 0;
+      }
     }
 
     camera.position.copy(position.current);

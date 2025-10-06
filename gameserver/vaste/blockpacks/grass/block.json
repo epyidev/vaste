@@ -4,6 +4,7 @@
   "displayName": "Grass",
   "solid": true,
   "transparent": false,
+  "friction": 0.6,
   "textures": {
     "top": "/blockpacks/grass/textures/grass_top.png",
     "side": "/blockpacks/grass/textures/grass_side.png",

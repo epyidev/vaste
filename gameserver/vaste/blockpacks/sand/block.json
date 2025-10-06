@@ -4,6 +4,7 @@
   "displayName": "Sand",
   "solid": true,
   "transparent": false,
+  "friction": 0.6,
   "textures": {
     "all": "/blockpacks/sand/textures/sand.png"
   }
