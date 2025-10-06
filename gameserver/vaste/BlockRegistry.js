@@ -1,11 +1,16 @@
+const fs = require('fs');
+const path = require('path');
+
 /**
  * BlockRegistry - Server-side String-Based Block System
  * 
  * DEVELOPER-FACING: Use string IDs only!
- * - To add a block: just use "namespace:name" format (e.g., "vaste:stone", "mymod:ruby")
+ * - To add a block: just create a folder in blockpacks/ with a block.json file
  * - NO manual numeric IDs needed
  * 
  * INTERNAL SYSTEM (automatic):
+ * - Blocks are loaded dynamically from blockpacks/ directory
+ * - Each folder = 1 block (folder name doesn't matter, stringId in block.json does)
  * - Numeric IDs are generated at runtime for network efficiency
  * - Server syncs mapping table to clients at connection
  * - World storage uses string IDs (future-proof, no conflicts)
@@ -16,52 +21,75 @@
  */
 
 /**
- * Official block registry - string IDs only
+ * Load all blocks from blockpacks directory
  */
-const BLOCK_REGISTRY = new Map([
-  ["vaste:air", {
+function loadBlockpacks() {
+  const BLOCK_REGISTRY = new Map();
+  const blockpacksPath = path.join(__dirname, 'blockpacks');
+  
+  // Always add air block first (hardcoded special case)
+  BLOCK_REGISTRY.set("vaste:air", {
     stringId: "vaste:air",
     name: "air",
     displayName: "Air",
     solid: false,
     transparent: true,
-  }],
-  ["vaste:stone", {
-    stringId: "vaste:stone",
-    name: "stone",
-    displayName: "Stone",
-    solid: true,
-    transparent: false,
-  }],
-  ["vaste:dirt", {
-    stringId: "vaste:dirt",
-    name: "dirt",
-    displayName: "Dirt",
-    solid: true,
-    transparent: false,
-  }],
-  ["vaste:grass", {
-    stringId: "vaste:grass",
-    name: "grass",
-    displayName: "Grass",
-    solid: true,
-    transparent: false,
-  }],
-  ["vaste:wood", {
-    stringId: "vaste:wood",
-    name: "wood",
-    displayName: "Wood",
-    solid: true,
-    transparent: false,
-  }],
-  ["vaste:sand", {
-    stringId: "vaste:sand",
-    name: "sand",
-    displayName: "Sand",
-    solid: true,
-    transparent: false,
-  }],
-]);
+  });
+
+  try {
+    // Read all directories in blockpacks folder
+    const entries = fs.readdirSync(blockpacksPath, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      // Skip files, only process directories
+      if (!entry.isDirectory()) {
+        continue;
+      }
+
+      const blockDir = path.join(blockpacksPath, entry.name);
+      const blockJsonPath = path.join(blockDir, 'block.json');
+
+      // Check if block.json exists
+      if (fs.existsSync(blockJsonPath)) {
+        try {
+          const blockData = JSON.parse(fs.readFileSync(blockJsonPath, 'utf8'));
+          
+          // Validate required fields
+          if (!blockData.stringId) {
+            console.warn(`[BlockRegistry] Block in ${entry.name}/ missing stringId, skipping`);
+            continue;
+          }
+
+          // Add to registry
+          BLOCK_REGISTRY.set(blockData.stringId, {
+            stringId: blockData.stringId,
+            name: blockData.name || entry.name,
+            displayName: blockData.displayName || blockData.name || entry.name,
+            solid: blockData.solid !== undefined ? blockData.solid : true,
+            transparent: blockData.transparent !== undefined ? blockData.transparent : false,
+            textures: blockData.textures || {},
+            ...blockData // Include any additional properties
+          });
+
+          console.log(`[BlockRegistry] Loaded blockpack: ${blockData.stringId} from ${entry.name}/`);
+        } catch (error) {
+          console.error(`[BlockRegistry] Error loading block from ${entry.name}/block.json:`, error.message);
+        }
+      } else {
+        console.warn(`[BlockRegistry] Directory ${entry.name}/ has no block.json, skipping`);
+      }
+    }
+  } catch (error) {
+    console.error('[BlockRegistry] Error reading blockpacks directory:', error.message);
+  }
+
+  return BLOCK_REGISTRY;
+}
+
+/**
+ * Official block registry - dynamically loaded from blockpacks
+ */
+const BLOCK_REGISTRY = loadBlockpacks();
 
 /**
  * BlockMappingManager - Server-side mapping manager
