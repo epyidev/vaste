@@ -35,8 +35,8 @@ export function PlayerController({
   const velocity = useRef(new THREE.Vector3(0, 0, 0));
   const keys = useRef<Record<string, boolean>>({});
   const onGround = useRef(false);
+  const wasOnGround = useRef(false); // Pour détecter le moment du saut
   const currentGroundBlockId = useRef(0);
-  const currentFriction = useRef(0.6); // Smoothed friction value
 
   const lastNetworkUpdate = useRef(0);
   const lastChunkUpdate = useRef(0);
@@ -136,36 +136,32 @@ export function PlayerController({
     const jump = keys.current.Space;
     const sprint = keys.current.ShiftLeft || keys.current.ShiftRight;
 
-    // Sprint only applies to forward movement
-    const forwardSpeed = sprint ? PHYSICS_CONFIG.sprintSpeed : PHYSICS_CONFIG.walkSpeed;
-    const backwardSpeed = PHYSICS_CONFIG.walkSpeed * 0.75; // 75% of walk speed (3.24 / 4.317)
-    const strafeSpeed = PHYSICS_CONFIG.walkSpeed * 0.765; // 76.5% of walk speed (3.30 / 4.317)
+    // Détecter les transitions sol/air
+    const justLanded = onGround.current && !wasOnGround.current;
+    const justJumped = !onGround.current && wasOnGround.current;
+    wasOnGround.current = onGround.current;
 
-    // Build input vector with directional speeds (NOT normalized yet)
-    const inputX = (right ? strafeSpeed : 0) - (left ? strafeSpeed : 0);
-    const inputZ = (backward ? backwardSpeed : 0) - (forward ? forwardSpeed : 0);
+    // Déterminer la vitesse cible selon le mode
+    const speedTarget = sprint && forward ? PHYSICS_CONFIG.sprintSpeed : PHYSICS_CONFIG.walkSpeed;
 
+    // Construire la direction d'entrée (normalisée)
+    const inputX = (right ? 1 : 0) - (left ? 1 : 0);
+    const inputZ = (backward ? 1 : 0) - (forward ? 1 : 0);
     const inputVector = new THREE.Vector2(inputX, inputZ);
     
-    // Normalize to prevent diagonal movement from being faster
     if (inputVector.length() > 0) {
       inputVector.normalize();
     }
 
-    // Get camera's forward direction
+    // Obtenir la direction de la caméra
     const cameraDirection = new THREE.Vector3();
     camera.getWorldDirection(cameraDirection);
-    
-    // Project onto horizontal plane
     cameraDirection.y = 0;
     
-    // Normalize (will be zero if looking straight up/down)
     const length = cameraDirection.length();
     if (length > 0.001) {
       cameraDirection.normalize();
     } else {
-      // When looking straight up/down, use camera's rotation around Y axis
-      // Get the camera's world rotation
       const euler = new THREE.Euler().setFromQuaternion(camera.getWorldQuaternion(new THREE.Quaternion()), 'YXZ');
       const yaw = euler.y;
       cameraDirection.set(-Math.sin(yaw), 0, -Math.cos(yaw));
@@ -175,124 +171,95 @@ export function PlayerController({
     cameraRight.crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0));
     cameraRight.normalize();
 
-    // After normalization, multiply by the dominant speed
-    // The normalized vector already accounts for direction mixing
-    const dominantSpeed = Math.max(Math.abs(inputX), Math.abs(inputZ));
-    
-    const targetVelocity = new THREE.Vector3();
-    targetVelocity.addScaledVector(cameraRight, inputVector.x * dominantSpeed);
-    targetVelocity.addScaledVector(cameraDirection, -inputVector.y * dominantSpeed);
+    // Calculer la direction voulue dans l'espace monde
+    const inputDirection = new THREE.Vector3();
+    inputDirection.addScaledVector(cameraRight, inputVector.x);
+    inputDirection.addScaledVector(cameraDirection, -inputVector.y);
 
-    // Get friction from the block beneath the player
-    const targetFriction = getBlockFriction(currentGroundBlockId.current);
+    // ========================================
+    // SYSTÈME DE MOMENTUM - ACCÉLÉRATION HORIZONTALE
+    // ========================================
     
-    // Smooth friction transitions to avoid abrupt changes when moving between blocks
-    // This prevents sudden stops when sliding from one block to another
-    const frictionBlendSpeed = 5.0; // How fast friction adapts (lower = smoother)
-    if (onGround.current) {
-      // Gradually blend toward target friction
-      currentFriction.current += (targetFriction - currentFriction.current) * Math.min(1.0, frictionBlendSpeed * dt);
-    } else {
-      // In air, keep the friction from the last ground block
-      // This maintains sliding momentum when falling off edges
+    // Accélération selon si on est au sol ou en l'air
+    const accel = onGround.current ? PHYSICS_CONFIG.groundAcceleration : PHYSICS_CONFIG.airAcceleration;
+    
+    if (inputVector.length() > 0) {
+      // Appliquer l'accélération dans la direction d'entrée
+      velocity.current.x += inputDirection.x * accel * dt;
+      velocity.current.z += inputDirection.z * accel * dt;
     }
-    
-    // Friction only applies when no input (sliding/gliding)
-    const friction = currentFriction.current;
-    
-    // Apply friction when on ground and no input
-    const hasInput = inputVector.length() > 0;
 
-    // Check if player is sliding (has significant velocity without input)
-    const currentSpeed = Math.sqrt(velocity.current.x * velocity.current.x + velocity.current.z * velocity.current.z);
+    // Clamp de la vitesse horizontale selon le mode
+    const horizontalSpeed = Math.sqrt(
+      velocity.current.x * velocity.current.x + 
+      velocity.current.z * velocity.current.z
+    );
+    
+    if (horizontalSpeed > speedTarget) {
+      const scale = speedTarget / horizontalSpeed;
+      velocity.current.x *= scale;
+      velocity.current.z *= scale;
+    }
 
-    if (onGround.current) {
-      if (hasInput) {
-        // Player is actively moving
-        // No friction interference, no landing delay, no direction resistance
-        // Just instant, responsive control (100% control when on ground)
-        velocity.current.x = targetVelocity.x;
-        velocity.current.z = targetVelocity.z;
-      } else {
-        // Apply friction when no input - reduces velocity based on friction coefficient
-        // Lower friction (0.0-0.5) = stops quickly
-        // Higher friction (0.5-1.0) = slides more
-        velocity.current.x *= friction;
-        velocity.current.z *= friction;
-        
-        // Stop completely if velocity is very small
-        if (Math.abs(velocity.current.x) < 0.01) velocity.current.x = 0;
-        if (Math.abs(velocity.current.z) < 0.01) velocity.current.z = 0;
-      }
-    } else {
-      // In air - smooth, limited control
-      // You can adjust trajectory but not change direction completely
+    // ========================================
+    // FRICTION DE L'AIR
+    // ========================================
+    
+    if (!onGround.current) {
+      // Convertir la friction par seconde en friction par frame
+      // friction_per_frame = friction_per_second ^ dt
+      const airFrictionPerFrame = Math.pow(PHYSICS_CONFIG.airFrictionPerSecond, dt);
+      velocity.current.x *= airFrictionPerFrame;
+      velocity.current.z *= airFrictionPerFrame;
+    }
+
+    // ========================================
+    // FRICTION AU SOL (via BlockRegistry)
+    // ========================================
+    
+    if (onGround.current && inputVector.length() === 0) {
+      // Appliquer la friction du bloc quand aucune entrée
+      const blockFriction = getBlockFriction(currentGroundBlockId.current);
+      velocity.current.x *= blockFriction;
+      velocity.current.z *= blockFriction;
       
-      if (hasInput) {
-        // Calculate how much the desired direction differs from current velocity
-        const currentVel = new THREE.Vector2(velocity.current.x, velocity.current.z);
-        const targetVel = new THREE.Vector2(targetVelocity.x, targetVelocity.z);
-        
-        // Detect if this is mainly a camera rotation or WASD input
-        // If current and target speeds are similar, it's probably camera rotation
-        const currentSpeed = currentVel.length();
-        const targetSpeed = targetVel.length();
-        const speedRatio = currentSpeed > 0.1 ? Math.abs(targetSpeed - currentSpeed) / currentSpeed : 1.0;
-        
-        // Calculate angle difference
-        let angleDiff = 0;
-        if (currentSpeed > 0.1 && targetSpeed > 0.1) {
-          const dot = currentVel.dot(targetVel) / (currentSpeed * targetSpeed);
-          angleDiff = Math.acos(Math.max(-1, Math.min(1, dot))); // Clamp to avoid NaN
-        }
-        
-        // Determine control strength based on what changed
-        let airControlStrength;
-        
-        if (speedRatio < 0.3 && angleDiff > 0.5) {
-          // Mainly camera rotation (speed unchanged, large angle change)
-          // Very minimal control for camera rotation - almost none
-          airControlStrength = 0.005; // 0.5% = extremely slow camera-induced rotation
-        } else {
-          // WASD input change (speed change or small angle change)
-          // Reduced by 1/3 as requested: 0.1 → 0.067
-          airControlStrength = 0.067; // ~6.7% blend per frame
-        }
-        
-        // Smoothly interpolate toward target velocity
-        velocity.current.x += (targetVelocity.x - velocity.current.x) * airControlStrength;
-        velocity.current.z += (targetVelocity.z - velocity.current.z) * airControlStrength;
-        
-        // Apply very minimal air friction (98% = almost no slowdown)
-        velocity.current.x *= 0.98;
-        velocity.current.z *= 0.98;
-      } else {
-        // No input in air - preserve momentum with minimal air friction
-        // This maintains your velocity when you release keys mid-jump
-        velocity.current.x *= 0.98;
-        velocity.current.z *= 0.98;
-        
-        // Don't stop - keep momentum (only stop if truly negligible)
-        if (Math.abs(velocity.current.x) < 0.001) velocity.current.x = 0;
-        if (Math.abs(velocity.current.z) < 0.001) velocity.current.z = 0;
-      }
+      // Arrêt complet si vitesse très faible
+      if (Math.abs(velocity.current.x) < 0.01) velocity.current.x = 0;
+      if (Math.abs(velocity.current.z) < 0.01) velocity.current.z = 0;
     }
 
+    // ========================================
+    // GRAVITÉ
+    // ========================================
+    
     velocity.current.y -= PHYSICS_CONFIG.gravity * dt;
 
+    // ========================================
+    // SAUT AVEC CONSERVATION DU MOMENTUM
+    // ========================================
+    
     if (jump && onGround.current) {
+      // Impulsion verticale
       velocity.current.y = PHYSICS_CONFIG.jumpVelocity;
+      
+      // Conservation du momentum horizontal (MOMENTUM_RETAIN)
+      velocity.current.x *= PHYSICS_CONFIG.momentumRetain;
+      velocity.current.z *= PHYSICS_CONFIG.momentumRetain;
+      
+      onGround.current = false;
     }
 
-    const moveDelta = velocity.current.clone().multiplyScalar(dt);
+    // ========================================
+    // MISE À JOUR DE LA POSITION
+    // ========================================
 
+    const moveDelta = velocity.current.clone().multiplyScalar(dt);
     const playerFeetY = position.current.y - PHYSICS_CONFIG.playerEyeHeight;
 
-    // If no chunks loaded, use simple physics without collision
+    // Si aucun chunk chargé, physique simple
     if (chunks.size === 0) {
       position.current.add(moveDelta);
       
-      // Simple ground check at spawn level
       const groundLevel = spawnPoint.y;
       if (position.current.y - PHYSICS_CONFIG.playerEyeHeight < groundLevel) {
         position.current.y = groundLevel + PHYSICS_CONFIG.playerEyeHeight;
@@ -302,7 +269,7 @@ export function PlayerController({
         onGround.current = false;
       }
     } else {
-      // Use proper collision detection
+      // Détection de collision avec le monde voxel
       const result = VoxelPhysics.sweepAABB(
         chunks,
         new THREE.Vector3(position.current.x, playerFeetY, position.current.z),
@@ -317,33 +284,19 @@ export function PlayerController({
         result.position.z
       );
 
-      // Don't stop horizontal velocity when gliding - only stop if we hit a wall while grounded with input
-      const expectedDelta = moveDelta.clone();
-      
-      // Update ground state
+      // Mettre à jour l'état au sol
       onGround.current = result.onGround;
       currentGroundBlockId.current = result.groundBlockId;
       
-      // Handle velocity after collision
-      // Only zero horizontal velocity if:
-      // 1. Player is actively trying to move into a wall (has input)
-      // 2. OR player hit a wall while NOT sliding (low horizontal velocity)
-      const isSliding = !hasInput && (Math.abs(velocity.current.x) > 0.1 || Math.abs(velocity.current.z) > 0.1);
+      // Gérer la vélocité après collision
+      const expectedDelta = moveDelta.clone();
       
       if (Math.abs(result.velocity.x - expectedDelta.x) > 0.001) {
-        // X collision detected
-        if (hasInput || !isSliding) {
-          velocity.current.x = 0;
-        }
-        // If sliding, keep velocity to allow sliding off edges
+        velocity.current.x = 0;
       }
       
       if (Math.abs(result.velocity.z - expectedDelta.z) > 0.001) {
-        // Z collision detected
-        if (hasInput || !isSliding) {
-          velocity.current.z = 0;
-        }
-        // If sliding, keep velocity to allow sliding off edges
+        velocity.current.z = 0;
       }
       
       if (Math.abs(result.velocity.y - expectedDelta.y) > 0.001) {

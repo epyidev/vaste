@@ -1,5 +1,6 @@
 /**
  * Movement and physics configuration
+ * Système de momentum de sauts enchaînés
  */
 
 export const PHYSICS_CONFIG = {
@@ -9,26 +10,24 @@ export const PHYSICS_CONFIG = {
   playerEyeHeight: 1.62,
 
   // Movement speeds (blocks per second)
-  walkSpeed: 4.317,
-  sprintSpeed: 5.612,
+  walkSpeed: 4.3,       // MAX_WALK_SPEED
+  sprintSpeed: 5.6,     // MAX_RUN_SPEED
   sneakSpeed: 1.295,
 
-  // Air control (percentage of ground control)
-  // Can barely adjust trajectory in air
-  airControl: 0.02,
+  // Acceleration (blocks per second²)
+  groundAcceleration: 50.0,  // GROUND_ACCEL - accélération forte au sol
+  airAcceleration: 10.0,      // AIR_ACCEL - contrôle limité en l'air
 
-  // Acceleration (much higher for instant response)
-  groundAcceleration: 100.0,
-  airAcceleration: 1.0, // Very limited for realistic air control
+  // Friction (coefficient par seconde)
+  // Note: sera converti en coefficient par frame dans le controller
+  airFrictionPerSecond: 0.91,  // AIR_FRICTION - friction horizontale en l'air
 
-  // Friction (applied per frame, not per second)
-  groundFriction: 0.5,
-  airFriction: 0.99, // Very low air friction to preserve momentum
+  // Gravity and jumping (blocks per second)
+  gravity: 32,           // GRAVITY
+  jumpVelocity: 8.4,        // JUMP_VELOCITY
 
-  // Gravity and jumping
-  // Jump velocity of 9.0 allows jumping exactly 1.25 blocks
-  gravity: 32.0,
-  jumpVelocity: 9.0,
+  // Momentum retention for chained jumps
+  momentumRetain: 0.85,     // MOMENTUM_RETAIN - conservation du momentum entre sauts
 
   // Step height (auto-climb blocks)
   stepHeight: 0.6,
