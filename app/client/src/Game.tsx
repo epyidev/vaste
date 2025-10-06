@@ -67,6 +67,7 @@ export function Game({ serverUrl, user }: GameProps) {
   const controlsRef = useRef<any>(null);
   const fpsCounterRef = useRef({ frames: 0, lastTime: performance.now() });
   const initialChunksLoadedRef = useRef(false);
+  const ignoreNextUnlockRef = useRef(false);
 
   // Shadow settings - Optimized for sharp voxel shadows
   const shadowSettings = shadowsEnabled 
@@ -245,22 +246,40 @@ export function Game({ serverUrl, user }: GameProps) {
   // Track pointer lock state and smooth mouse movements
   useEffect(() => {
     let ignoreNextMovement = false;
-    let movementTimeout: number;
+    let movementTimeout: ReturnType<typeof setTimeout>;
     const movementHistory: { x: number; y: number; time: number }[] = [];
     const MAX_HISTORY = 3; // Keep last 3 movements for smoothing
     const MAX_MOVEMENT = 30; // Maximum pixels per movement to prevent spikes
     let lastMovementTime = 0;
+    let previousLockState = document.pointerLockElement !== null; // Track previous state locally
 
     const handleLockChange = () => {
       const locked = document.pointerLockElement !== null;
-      console.log('[PauseMenu] Pointer lock changed:', { locked, loadingState, isPaused, isSettingsOpen });
+      console.log('[PointerLock] Changed:', {
+        locked,
+        previousLockState,
+        isPaused,
+        isSettingsOpen,
+        loadingState,
+        ignoreNextUnlock: ignoreNextUnlockRef.current
+      });
       setIsPointerLocked(locked);
 
-      // When unlocking during gameplay (not in menus), open pause menu
-      if (!locked && loadingState === 'ready' && !isPaused && !isSettingsOpen) {
-        console.log('[PauseMenu] Opening pause menu due to pointer unlock');
+      // When unlocking during gameplay (not already in menu), open pause menu
+      if (!locked && previousLockState && loadingState === 'ready' && !isPaused && !isSettingsOpen && !ignoreNextUnlockRef.current) {
+        console.log('[PointerLock] Unlocked during gameplay, opening pause menu');
         setIsPaused(true);
+      } else if (!locked && ignoreNextUnlockRef.current) {
+        console.log('[PointerLock] Unlock ignored (triggered by menu close)');
       }
+
+      // Clear the ignore flag after unlock
+      if (!locked) {
+        ignoreNextUnlockRef.current = false;
+      }
+
+      // Update previous state
+      previousLockState = locked;
 
       // When locking, clear history and ignore first movement
       if (locked) {
@@ -338,12 +357,12 @@ export function Game({ serverUrl, user }: GameProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Handle ESC key
       if (e.key === 'Escape') {
-        console.log('[PauseMenu] ESC pressed:', { loadingState, isSettingsOpen, isPaused, isPointerLocked });
+        console.log('[ESC] Key pressed - State:', { loadingState, isPaused, isSettingsOpen, isPointerLocked });
         if (loadingState !== 'ready') return;
 
         // Priority 1: If settings are open, close settings and return to pause menu
         if (isSettingsOpen) {
-          console.log('[PauseMenu] Closing settings');
+          console.log('[ESC] Closing settings');
           e.preventDefault();
           e.stopImmediatePropagation();
           handleCloseSettings();
@@ -352,16 +371,37 @@ export function Game({ serverUrl, user }: GameProps) {
 
         // Priority 2: If pause menu is open, close it and resume game
         if (isPaused) {
-          console.log('[PauseMenu] Closing pause menu, resuming game');
+          console.log('[ESC] Closing pause menu, resuming game');
           e.preventDefault();
           e.stopImmediatePropagation();
-          handleResume();
+
+          // Set flag to ignore unlock events triggered by our lock attempt
+          ignoreNextUnlockRef.current = true;
+          console.log('[ESC] Set ignoreNextUnlock flag');
+
+          // Close menu first
+          setIsPaused(false);
+
+          // Request pointer lock IMMEDIATELY in user gesture context
+          if (controlsRef.current) {
+            console.log('[ESC] Requesting pointer lock...');
+            controlsRef.current.lock();
+          }
+
+          // Verify lock succeeded after a short delay
+          setTimeout(() => {
+            if (!document.pointerLockElement) {
+              console.warn('[ESC] Pointer lock failed, reopening pause menu');
+              setIsPaused(true);
+              ignoreNextUnlockRef.current = false;
+            }
+          }, 100);
           return;
         }
 
-        // Priority 3: If playing, let browser handle pointer unlock (it will trigger handleLockChange)
-        console.log('[PauseMenu] Playing - letting browser unlock pointer');
-        // Don't prevent default here - let the browser unlock the pointer
+        // Priority 3: Playing - let browser unlock pointer naturally
+        // The pointerlockchange event will handle opening the pause menu
+        console.log('[ESC] In game, letting browser unlock pointer');
       }
 
       // Block common browser shortcuts when playing
@@ -386,18 +426,17 @@ export function Game({ serverUrl, user }: GameProps) {
     };
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
-    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    };
   }, [isPointerLocked, loadingState, isSettingsOpen, isPaused]);
 
   // Pause menu handlers
   const handleResume = useCallback(() => {
     setIsPaused(false);
-    // Small delay to avoid SecurityError when re-locking too quickly
-    setTimeout(() => {
-      if (controlsRef.current) {
-        controlsRef.current.lock();
-      }
-    }, 100);
+    if (controlsRef.current) {
+      controlsRef.current.lock();
+    }
   }, []);
 
   const handleOpenPauseMenu = useCallback(() => {
