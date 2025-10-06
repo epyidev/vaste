@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
-import { PointerLockControls, Sky } from "@react-three/drei";
+import { Sky } from "@react-three/drei";
 import * as THREE from "three";
 import { NetworkManager } from "./network";
 import { VoxelWorld } from "./components/VoxelWorld";
 import { PlayerController } from "./components/PlayerController";
 import { BlockSelector } from "./components/BlockSelector";
+import { SmoothPointerLockControls } from "./components/SmoothPointerLockControls";
 import LoadingScreen from "./components/ui/LoadingScreen";
 import { PauseMenu } from "./components/ui/PauseMenu";
 import { SettingsMenu } from "./components/ui/SettingsMenu";
@@ -170,6 +171,12 @@ export function Game({ serverUrl, user }: GameProps) {
       // Start fade out after a brief moment
       setTimeout(() => {
         setLoadingState('ready');
+        // Lock pointer automatically once ready
+        if (controlsRef.current) {
+          setTimeout(() => {
+            controlsRef.current.lock();
+          }, 100);
+        }
         // Fade out loading screen smoothly
         setTimeout(() => {
           setShowLoadingScreen(false);
@@ -434,7 +441,12 @@ export function Game({ serverUrl, user }: GameProps) {
         shadows
       >
         {/* Controls */}
-        <PointerLockControls ref={controlsRef} />
+        <SmoothPointerLockControls 
+          ref={controlsRef}
+          sensitivity={0.002}
+          verticalClampDegrees={89}
+          smoothingFactor={0.5}
+        />
         
         {/* Player Controller */}
         <PlayerController 
