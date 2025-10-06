@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Sky } from "@react-three/drei";
 import * as THREE from "three";
@@ -75,15 +75,15 @@ export function Game({ serverUrl, user }: GameProps) {
   // Handle window focus/blur to prevent camera jumps
   useEffect(() => {
     const handleBlur = () => {
-      // When window loses focus, unlock pointer to prevent accumulated movements
-      if (controlsRef.current && isPointerLocked) {
-        controlsRef.current.unlock();
+      // When window loses focus, open pause menu
+      if (isPointerLocked && loadingState === 'ready' && !isPaused && !isSettingsOpen) {
+        setIsPaused(true);
       }
     };
 
     window.addEventListener('blur', handleBlur);
     return () => window.removeEventListener('blur', handleBlur);
-  }, [isPointerLocked]);
+  }, [isPointerLocked, loadingState, isPaused, isSettingsOpen]);
 
   useEffect(() => {
     const network = new NetworkManager(
@@ -171,11 +171,9 @@ export function Game({ serverUrl, user }: GameProps) {
       // Start fade out after a brief moment
       setTimeout(() => {
         setLoadingState('ready');
-        // Lock pointer automatically once ready
+        // Lock pointer immediately when ready
         if (controlsRef.current) {
-          setTimeout(() => {
-            controlsRef.current.lock();
-          }, 100);
+          controlsRef.current.lock();
         }
         // Fade out loading screen smoothly
         setTimeout(() => {
@@ -197,13 +195,6 @@ export function Game({ serverUrl, user }: GameProps) {
     const handleLockChange = () => {
       const locked = document.pointerLockElement !== null;
       setIsPointerLocked(locked);
-      
-      // If pause menu or settings menu is open and user tries to lock pointer, prevent it
-      if (locked && (isPaused || isSettingsOpen)) {
-        if (controlsRef.current) {
-          controlsRef.current.unlock();
-        }
-      }
 
       // When locking, clear history and ignore first movement
       if (locked) {
@@ -274,11 +265,41 @@ export function Game({ serverUrl, user }: GameProps) {
       document.removeEventListener('mousemove', handleMouseMove, { capture: true });
       clearTimeout(movementTimeout);
     };
-  }, [isPaused, isSettingsOpen]);
+  }, [isPaused, isSettingsOpen, loadingState]);
 
-  // Block browser shortcuts when pointer is locked (playing)
+  // Unified keyboard handler: ESC for menu + block browser shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Handle ESC key
+      if (e.key === 'Escape') {
+        if (loadingState !== 'ready') return;
+        
+        e.preventDefault();
+        e.stopImmediatePropagation(); // Stop ALL other handlers
+        
+        if (isSettingsOpen) {
+          return;
+        }
+        
+        if (isPaused) {
+          return;
+        }
+        
+        // Priority 3: If playing with locked pointer, unlock cursor (no menu)
+        if (isPointerLocked) {
+          if (controlsRef.current) {
+            controlsRef.current.unlock();
+          }
+          return;
+        }
+        
+        // Priority 4: If cursor is unlocked but menu not open, open menu
+        if (!isPointerLocked && !isPaused) {
+          setIsPaused(true);
+          return;
+        }
+      }
+
       // Block common browser shortcuts when playing
       if (isPointerLocked) {
         // Ctrl/Cmd combinations
@@ -300,45 +321,22 @@ export function Game({ serverUrl, user }: GameProps) {
       }
     };
 
-    // Capture phase to intercept before other handlers
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [isPointerLocked]);
-
-  // Handle ESC key for pause menu and settings
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && loadingState === 'ready') {
-        e.preventDefault();
-        
-        // Close settings if open
-        if (isSettingsOpen) {
-          setIsSettingsOpen(false);
-          setIsPaused(true);
-          return;
-        }
-        
-        // Toggle pause menu if pointer is unlocked
-        if (!isPointerLocked) {
-          setIsPaused(prev => !prev);
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [loadingState, isPointerLocked, isSettingsOpen]);
+  }, [isPointerLocked, loadingState, isSettingsOpen, isPaused]);
 
   // Pause menu handlers
-  const handleResume = () => {
+  const handleResume = useCallback(() => {
     setIsPaused(false);
-    // Re-lock the pointer after a small delay
-    setTimeout(() => {
-      if (controlsRef.current) {
-        controlsRef.current.lock();
-      }
-    }, 100);
-  };
+    // Lock immediately (synchronous browser API)
+    if (controlsRef.current) {
+      controlsRef.current.lock();
+    }
+  }, []);
+
+  const handleOpenPauseMenu = useCallback(() => {
+    setIsPaused(true);
+  }, []);
 
   const handleOpenSettings = () => {
     setIsPaused(false);
@@ -463,6 +461,7 @@ export function Game({ serverUrl, user }: GameProps) {
         <BlockSelector 
           networkManager={networkRef.current} 
           playerPosition={playerPos}
+          isMenuOpen={isPaused || isSettingsOpen}
         />
         
         {/* Sky */}
@@ -512,9 +511,6 @@ export function Game({ serverUrl, user }: GameProps) {
         <div style={{ marginTop: "5px" }}>Chunks: {chunks.size}</div>
         <div style={{ marginTop: "5px" }}>
           Position: X: {playerPos.x.toFixed(1)} Y: {playerPos.y.toFixed(1)} Z: {playerPos.z.toFixed(1)}
-        </div>
-        <div style={{ marginTop: "10px", opacity: 0.7, fontSize: "12px" }}>
-          {isPointerLocked ? 'Press ESC to unlock cursor' : 'Press ESC again for pause menu'}
         </div>
       </div>
 

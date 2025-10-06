@@ -9,9 +9,10 @@ import { PHYSICS_CONFIG } from '../config/movement';
 interface BlockSelectorProps {
   networkManager: NetworkManager | null;
   playerPosition: { x: number; y: number; z: number };
+  isMenuOpen: boolean;
 }
 
-export const BlockSelector: React.FC<BlockSelectorProps> = ({ networkManager, playerPosition }) => {
+export const BlockSelector: React.FC<BlockSelectorProps> = ({ networkManager, playerPosition, isMenuOpen }) => {
   const { camera, scene } = useThree();
   const raycaster = useRef(new THREE.Raycaster());
   const [targetBlock, setTargetBlock] = useState<[number, number, number] | null>(null);
@@ -106,7 +107,8 @@ export const BlockSelector: React.FC<BlockSelectorProps> = ({ networkManager, pl
 
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
-      if (!targetBlock) return;
+      // Don't allow block actions when menu is open
+      if (isMenuOpen || !targetBlock) return;
 
       if (e.button === 0) {
         breakBlock(targetBlock);
@@ -131,7 +133,7 @@ export const BlockSelector: React.FC<BlockSelectorProps> = ({ networkManager, pl
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('contextmenu', handleContextMenu);
     };
-  }, [targetBlock, adjacentPosition, breakBlock, placeBlock]);
+  }, [targetBlock, adjacentPosition, breakBlock, placeBlock, isMenuOpen]);
 
   return targetBlock ? <BlockOutline position={targetBlock} /> : null;
 };

@@ -93,13 +93,6 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
     ...buttonBaseStyles,
   };
 
-  const hintStyles: React.CSSProperties = {
-    marginTop: '32px',
-    color: '#888888',
-    fontSize: '14px',
-    letterSpacing: '0.5px',
-  };
-
   return (
     <div style={overlayStyles}>
       <div style={titleStyles}>PAUSED</div>
@@ -141,7 +134,6 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
           DISCONNECT
         </button>
       </div>
-      <div style={hintStyles}>Press ESC to resume</div>
     </div>
   );
 };
