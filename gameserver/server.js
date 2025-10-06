@@ -13,8 +13,42 @@ const { ChunkProtocol } = require("./world/ChunkProtocol");
 const { CHUNK_SIZE } = require("./world");
 const { BlockpackManager } = require("./BlockpackManager");
 
-const PORT = process.env.PORT || 25565;
-const HTTP_PORT = process.env.HTTP_PORT || 25566; // HTTP port for blockpack assets
+// Load server configuration first
+const CONFIG_FILE = path.join(__dirname, "server-config.json");
+let SERVER_CONFIG = {};
+
+function loadConfig() {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      SERVER_CONFIG = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
+    } else {
+      log("server-config.json not found! Please create it with your license key.", "ERROR");
+      log("Example configuration:", "INFO");
+      console.log(
+        JSON.stringify(
+          {
+            license_key: "vaste_your_license_key_here",
+            max_players: 20,
+            wsPort: 25565,
+            httpPort: 25566
+          },
+          null,
+          2
+        )
+      );
+      process.exit(1);
+    }
+  } catch (error) {
+    log(`Error loading configuration: ${error.message}`, "ERROR");
+    process.exit(1);
+  }
+}
+
+// Load config before using ports
+loadConfig();
+
+const PORT = SERVER_CONFIG.wsPort || process.env.PORT || 25565;
+const HTTP_PORT = SERVER_CONFIG.httpPort || process.env.HTTP_PORT || 25566;
 const DEFAULT_RENDER_DISTANCE = 4; // chunks
 
 // Initialize Blockpack Manager
@@ -49,36 +83,6 @@ function showVasteAscii() {
 const BACKEND_HOST = "localhost";
 const BACKEND_PORT = 8080;
 const BACKEND_URL = `http://${BACKEND_HOST}:${BACKEND_PORT}`;
-
-// License configuration
-const CONFIG_FILE = path.join(__dirname, "server-config.json");
-let SERVER_CONFIG = {};
-
-// Load server configuration
-function loadConfig() {
-  try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      SERVER_CONFIG = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
-    } else {
-      log("server-config.json not found! Please create it with your license key.", "ERROR");
-      log("Example configuration:", "INFO");
-      console.log(
-        JSON.stringify(
-          {
-            license_key: "vaste_your_license_key_here",
-            max_players: 20,
-          },
-          null,
-          2
-        )
-      );
-      process.exit(1);
-    }
-  } catch (error) {
-    log(`Error loading configuration: ${error.message}`, "ERROR");
-    process.exit(1);
-  }
-}
 
 // Validate license with backend
 async function validateLicense() {
@@ -447,7 +451,8 @@ class GameServer {
       // Send blockpacks data to client
       ws.send(JSON.stringify({
         type: "blockpacks_data",
-        blockpacks: blockDefinitions
+        blockpacks: blockDefinitions,
+        httpPort: HTTP_PORT  // Send HTTP port for texture loading
       }));
 
       log(`Sent ${blockDefinitions.length} blockpacks to ${user.username}`);

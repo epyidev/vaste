@@ -419,12 +419,14 @@ export class NetworkManager {
     this.onLoadingStep?.('Downloading blockpacks', 'loading', `Receiving ${message.blockpacks.length} blockpack(s)...`);
     
     try {
-      // Extract server host from WebSocket URL
+      // Extract server host from WebSocket URL and use provided HTTP port
       const wsUrl = this.ws?.url || '';
       const url = new URL(wsUrl);
-      const serverUrl = `http://${url.hostname}:25566`; // HTTP port for blockpack assets
+      const httpPort = message.httpPort || 25566; // Use port from server, fallback to 25566
+      const serverUrl = `http://${url.hostname}:${httpPort}`;
       
-      this.onLoadingStep?.('Downloading blockpacks', 'loading', `Loading definitions from ${url.hostname}...`);
+      logger.info(`[Network] Using HTTP port ${httpPort} for blockpack assets`);
+      this.onLoadingStep?.('Downloading blockpacks', 'loading', `Loading definitions from ${url.hostname}:${httpPort}...`);
       
       // Load blockpacks from server data
       await loadBlockpacksFromServer(message.blockpacks, serverUrl);
