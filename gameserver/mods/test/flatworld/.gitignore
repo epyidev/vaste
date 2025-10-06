@@ -1,6 +1,5 @@
 # Ignore world JSON files
 *.json
-world.json
 worlds/*.json
 
 # Ignore temporary world files

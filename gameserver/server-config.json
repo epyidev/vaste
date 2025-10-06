@@ -1,7 +1,7 @@
 {
   "wsPort": 25565,
   "httpPort": 25566,
-  "license_key": "vaste_e09df9857fd2db67308ca5e70bfc2b718d7da987102882fdd9e57a96615d8a48",
+  "license_key": "",
   "max_players": 193,
   "maxRenderDistance": 16,
   "forceRenderDistance": false
