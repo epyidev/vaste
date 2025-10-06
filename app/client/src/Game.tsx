@@ -448,7 +448,10 @@ export function Game({ serverUrl, user }: GameProps) {
         />
         
         {/* Block Selection Outline */}
-        <BlockSelector networkManager={networkRef.current} />
+        <BlockSelector 
+          networkManager={networkRef.current} 
+          playerPosition={playerPos}
+        />
         
         {/* Sky */}
         <Sky
