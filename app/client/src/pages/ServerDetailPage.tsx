@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { gameServerService, GameServer } from "../services/gameServerService";
 import { useAuth } from "../contexts/AuthContext";
+import { Button } from "../components/ui/Button";
 
 const ServerDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -159,29 +160,6 @@ const ServerDetailPage: React.FC = () => {
     background: "#999",
   };
 
-  const connectButtonStyle: React.CSSProperties = {
-    padding: "0.75rem 1.5rem",
-    background: "#ffffff",
-    color: "#000",
-    border: "none",
-    borderRadius: "8px",
-    fontSize: "1rem",
-    fontWeight: "bold",
-    cursor: "pointer",
-    transition: "all 0.2s ease",
-  };
-
-  const disabledButtonStyle: React.CSSProperties = {
-    padding: "0.75rem 1.5rem",
-    background: "#666",
-    color: "#999",
-    border: "none",
-    borderRadius: "8px",
-    fontSize: "1rem",
-    fontWeight: "bold",
-    cursor: "not-allowed",
-  };
-
   const infoGridStyle: React.CSSProperties = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
@@ -274,9 +252,13 @@ const ServerDetailPage: React.FC = () => {
             </div>
           </div>
         </div>
-        <button style={server.is_online ? connectButtonStyle : disabledButtonStyle} disabled={!server.is_online} onClick={handleConnect}>
+        <Button 
+          variant="primary" 
+          onClick={handleConnect} 
+          disabled={!server.is_online}
+        >
           {server.is_online ? "Connect" : "Offline"}
-        </button>
+        </Button>
       </div>
 
       <div style={infoGridStyle}>

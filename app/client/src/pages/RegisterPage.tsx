@@ -59,29 +59,6 @@ const RegisterPage: React.FC = () => {
     gap: "1.5rem",
   };
 
-  const fieldStyle: React.CSSProperties = {
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.5rem",
-  };
-
-  const labelStyle: React.CSSProperties = {
-    color: "#ffffff",
-    fontSize: "1rem",
-    fontWeight: "bold",
-  };
-
-  const inputStyle: React.CSSProperties = {
-    padding: "0.75rem 1rem",
-    background: "rgba(255, 255, 255, 0.05)",
-    border: "1px solid rgba(255, 255, 255, 0.2)",
-    borderRadius: "8px",
-    color: "#ffffff",
-    fontSize: "1rem",
-    outline: "none",
-    transition: "all 0.2s ease",
-  };
-
   const errorStyles: React.CSSProperties = {
     background: "rgba(239, 68, 68, 0.1)",
     color: "rgba(239, 68, 68, 0.9)",
@@ -170,81 +147,37 @@ const RegisterPage: React.FC = () => {
         {authError && <div style={errorStyles}>{authError}</div>}
 
         <form onSubmit={handleSubmit} style={formStyle}>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Username</label>
-            <input
-              type="text"
-              value={formData.username}
-              onChange={(e) => handleInputChange("username", e.target.value)}
-              style={inputStyle}
-              placeholder="Enter your username"
-              onFocus={(e) => {
-                e.target.style.borderColor = "rgba(255, 255, 255, 0.4)";
-                e.target.style.background = "rgba(255, 255, 255, 0.08)";
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = "rgba(255, 255, 255, 0.2)";
-                e.target.style.background = "rgba(255, 255, 255, 0.05)";
-              }}
-            />
-          </div>
+          <Input
+            label="Username"
+            type="text"
+            value={formData.username}
+            onChange={(e) => handleInputChange("username", e.target.value)}
+            placeholder="Enter your username"
+          />
 
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Email</label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => handleInputChange("email", e.target.value)}
-              style={inputStyle}
-              placeholder="Enter your email"
-              onFocus={(e) => {
-                e.target.style.borderColor = "rgba(255, 255, 255, 0.4)";
-                e.target.style.background = "rgba(255, 255, 255, 0.08)";
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = "rgba(255, 255, 255, 0.2)";
-                e.target.style.background = "rgba(255, 255, 255, 0.05)";
-              }}
-            />
-          </div>
+          <Input
+            label="Email"
+            type="email"
+            value={formData.email}
+            onChange={(e) => handleInputChange("email", e.target.value)}
+            placeholder="Enter your email"
+          />
 
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Password</label>
-            <input
-              type="password"
-              value={formData.password}
-              onChange={(e) => handleInputChange("password", e.target.value)}
-              style={inputStyle}
-              placeholder="Enter your password"
-              onFocus={(e) => {
-                e.target.style.borderColor = "rgba(255, 255, 255, 0.4)";
-                e.target.style.background = "rgba(255, 255, 255, 0.08)";
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = "rgba(255, 255, 255, 0.2)";
-                e.target.style.background = "rgba(255, 255, 255, 0.05)";
-              }}
-            />
-          </div>
+          <Input
+            label="Password"
+            type="password"
+            value={formData.password}
+            onChange={(e) => handleInputChange("password", e.target.value)}
+            placeholder="Enter your password"
+          />
 
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Confirm Password</label>
-            <input
-              type="password"
-              value={formData.confirmPassword}
-              onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
-              style={inputStyle}
-              placeholder="Confirm your password"
-              onFocus={(e) => {
-                e.target.style.borderColor = "rgba(255, 255, 255, 0.4)";
-                e.target.style.background = "rgba(255, 255, 255, 0.08)";
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = "rgba(255, 255, 255, 0.2)";
-                e.target.style.background = "rgba(255, 255, 255, 0.05)";
-              }}
-            />
-          </div>
+          <Input
+            label="Confirm Password"
+            type="password"
+            value={formData.confirmPassword}
+            onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
+            placeholder="Confirm your password"
+          />
 
           <Button
             variant="primary"

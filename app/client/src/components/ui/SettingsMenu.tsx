@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Slider } from './Slider';
 import { ToggleButton } from './ToggleButton';
+import { Button } from './Button';
 
 export interface SettingsMenuProps {
   isOpen: boolean;
@@ -145,31 +146,6 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
     display: 'flex',
     gap: '16px',
     marginTop: '16px',
-  };
-
-  const buttonBaseStyles: React.CSSProperties = {
-    padding: '16px 48px',
-    fontSize: '16px',
-    fontWeight: '600',
-    border: '2px solid #ffffff',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    minWidth: '200px',
-    textAlign: 'center',
-    letterSpacing: '1px',
-  };
-
-  const primaryButtonStyles: React.CSSProperties = {
-    ...buttonBaseStyles,
-    background: '#ffffff',
-    color: '#000000',
-  };
-
-  const secondaryButtonStyles: React.CSSProperties = {
-    ...buttonBaseStyles,
-    background: 'transparent',
-    color: '#ffffff',
   };
 
   const comingSoonStyles: React.CSSProperties = {
@@ -317,33 +293,15 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
 
         {/* Buttons */}
         <div style={buttonsContainerStyles}>
-          <button
-            style={secondaryButtonStyles}
-            onClick={() => {
-              setLocalRenderDistance(currentRenderDistance);
-              onClose();
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
-            }}
-          >
+          <Button variant="secondary" onClick={() => {
+            setLocalRenderDistance(currentRenderDistance);
+            onClose();
+          }}>
             CANCEL
-          </button>
-          <button
-            style={primaryButtonStyles}
-            onClick={handleApply}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#dddddd';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = '#ffffff';
-            }}
-          >
+          </Button>
+          <Button variant="primary" onClick={handleApply}>
             APPLY
-          </button>
+          </Button>
         </div>
 
         <div style={hintStyles}>Press ESC to go back</div>

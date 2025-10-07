@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { gameServerService, GameServer } from "../services/gameServerService";
+import { Input } from "../components/ui";
 
 const ServerListPage: React.FC = () => {
   const [servers, setServers] = useState<GameServer[]>([]);
@@ -143,19 +144,6 @@ const ServerListPage: React.FC = () => {
     flex: "0 0 auto",
     position: "relative",
     width: "100%",
-  };
-
-  const searchInputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "0.75rem 1rem",
-    background: "rgba(255, 255, 255, 0.05)",
-    border: "1px solid rgba(255, 255, 255, 0.2)",
-    borderRadius: "8px",
-    color: "#ffffff",
-    fontSize: "1rem",
-    outline: "none",
-    transition: "all 0.2s ease",
-    boxSizing: "border-box" as const,
   };
 
   const serversContainerStyle: React.CSSProperties = {
@@ -329,20 +317,11 @@ const ServerListPage: React.FC = () => {
       <h1 style={titleStyle}>Available Servers</h1>
 
       <div style={searchContainerStyle}>
-        <input
+        <Input
           type="text"
           placeholder="Search servers..."
           value={searchQuery}
           onChange={handleSearchChange}
-          style={searchInputStyle}
-          onFocus={(e) => {
-            e.target.style.borderColor = "rgba(255, 255, 255, 0.4)";
-            e.target.style.background = "rgba(255, 255, 255, 0.08)";
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = "rgba(255, 255, 255, 0.2)";
-            e.target.style.background = "rgba(255, 255, 255, 0.05)";
-          }}
         />
       </div>
 

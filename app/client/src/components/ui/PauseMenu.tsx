@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Button } from './Button';
 
 interface PauseMenuProps {
   isOpen: boolean;
@@ -18,11 +19,9 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      // Start rendering, then fade in
       setShouldRender(true);
       setTimeout(() => setIsVisible(true), 10);
     } else {
-      // Fade out, then stop rendering
       setIsVisible(false);
       setTimeout(() => setShouldRender(false), 200);
     }
@@ -68,71 +67,19 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
     transition: 'opacity 0.2s ease-out 0.05s, transform 0.2s ease-out 0.05s',
   };
 
-  const buttonBaseStyles: React.CSSProperties = {
-    padding: '16px 48px',
-    fontSize: '16px',
-    fontWeight: '600',
-    border: '2px solid #ffffff',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    background: 'transparent',
-    color: '#ffffff',
-    minWidth: '250px',
-    textAlign: 'center',
-    letterSpacing: '1px',
-  };
-
-  const primaryButtonStyles: React.CSSProperties = {
-    ...buttonBaseStyles,
-    background: '#ffffff',
-    color: '#000000',
-  };
-
-  const secondaryButtonStyles: React.CSSProperties = {
-    ...buttonBaseStyles,
-  };
-
   return (
     <div style={overlayStyles}>
       <div style={titleStyles}>PAUSED</div>
       <div style={menuStyles}>
-        <button
-          style={primaryButtonStyles}
-          onClick={onResume}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = '#dddddd';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = '#ffffff';
-          }}
-        >
+        <Button variant="primary" onClick={onResume} style={{ width: '240px' }}>
           BACK TO GAME
-        </button>
-        <button
-          style={secondaryButtonStyles}
-          onClick={onOpenSettings}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-          }}
-        >
+        </Button>
+        <Button variant="secondary" onClick={onOpenSettings} style={{ width: '240px' }}>
           SETTINGS
-        </button>
-        <button
-          style={secondaryButtonStyles}
-          onClick={onDisconnect}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-          }}
-        >
+        </Button>
+        <Button variant="secondary" onClick={onDisconnect} style={{ width: '240px' }}>
           DISCONNECT
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -247,6 +247,7 @@ async function validateUserToken(token) {
 class GameServer {
   constructor(options = {}) {
     this.players = new Map();
+    this.authenticatingUsers = new Map(); // Track users currently authenticating
     this.options = options || {};
     this.log = (msg, level) => log(msg, level);
 
@@ -401,7 +402,7 @@ class GameServer {
               // Don't initialize player yet - wait for blockpacks_loaded confirmation
             } catch (error) {
               log(`Authentication failed: ${error.message}`, "ERROR");
-              ws.send(JSON.stringify({ type: "error", message: "Authentication failed" }));
+              ws.send(JSON.stringify({ type: "error", message: error.message || "Authentication failed" }));
               ws.close(1008, "Authentication failed");
             }
             return;
@@ -441,6 +442,8 @@ class GameServer {
         if (authTimeout) clearTimeout(authTimeout);
 
         if (authenticatedUser) {
+          // Clean up authenticating flag if user was still authenticating
+          this.authenticatingUsers.delete(authenticatedUser.id);
           this.handlePlayerDisconnect(authenticatedUser.id);
         } else {
           log(`Unauthenticated connection closed (temp ID: ${tempConnectionId.substring(0, 8)})`);
@@ -483,6 +486,15 @@ class GameServer {
         // Clean up old player data
         this.handlePlayerDisconnect(user.id);
       }
+
+      // Check if this user is currently authenticating from another connection
+      if (this.authenticatingUsers.has(user.id)) {
+        log(`User ${user.username} (ID: ${user.id}) is already authenticating. Rejecting duplicate connection.`, "WARN");
+        throw new Error("Account is already connecting");
+      }
+
+      // Mark user as authenticating
+      this.authenticatingUsers.set(user.id, { username: user.username, timestamp: Date.now() });
 
       log(`User authenticated: ${user.username} (ID: ${user.id})`);
 
@@ -530,7 +542,23 @@ class GameServer {
         message: "No world available. Server is not configured properly.",
         code: "NO_WORLD"
       }));
+      // Remove from authenticating users
+      this.authenticatingUsers.delete(user.id);
       // Keep connection open but don't initialize player
+      return;
+    }
+
+    // Double-check if player is already connected (race condition protection)
+    const existingPlayer = this.players.get(user.id);
+    if (existingPlayer) {
+      log(`Player ${user.username} (ID: ${user.id}) tried to connect twice. Rejecting duplicate.`, "WARN");
+      ws.send(JSON.stringify({
+        type: "error",
+        message: "Account is already connected from another location.",
+        code: "ALREADY_CONNECTED"
+      }));
+      ws.close(1008, "Account already connected");
+      this.authenticatingUsers.delete(user.id);
       return;
     }
 
@@ -552,6 +580,10 @@ class GameServer {
     };
 
     this.players.set(user.id, player);
+    
+    // Remove from authenticating users (now fully connected)
+    this.authenticatingUsers.delete(user.id);
+    
     log(`Player ${user.username} (ID: ${user.id}) connected. Total players: ${this.players.size}`);
 
     // Trigger mod system player join event
@@ -1110,7 +1142,11 @@ class GameServer {
 
   handlePlayerDisconnect(playerId) {
     const player = this.players.get(playerId);
-    if (!player) return;
+    if (!player) {
+      // Player might not be in players Map yet, but could be authenticating
+      this.authenticatingUsers.delete(playerId);
+      return;
+    }
 
     log(`Player ${player.username} disconnected. Total players: ${this.players.size - 1}`);
 
@@ -1120,6 +1156,9 @@ class GameServer {
     // Clean up message queues and chunk streaming
     this.messageQueues.delete(playerId);
     this.chunkStreamers.delete(playerId);
+    
+    // Clean up authenticating flag
+    this.authenticatingUsers.delete(playerId);
 
     // Remove player
     this.players.delete(playerId);

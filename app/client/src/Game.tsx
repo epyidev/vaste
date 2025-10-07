@@ -44,6 +44,7 @@ import LoadingScreen from "./components/ui/LoadingScreen";
 import { LoadingStep } from "./components/ui";
 import { PauseMenu } from "./components/ui/PauseMenu";
 import { SettingsMenu } from "./components/ui/SettingsMenu";
+import { DisconnectedScreen } from "./components/ui/DisconnectedScreen";
 import { useNavigate } from "react-router-dom";
 import { PlayerMovementState } from "./config/viewBobbing";
 
@@ -71,6 +72,7 @@ export function Game({ serverUrl, user }: GameProps) {
   const [isPaused, setIsPaused] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPointerLocked, setIsPointerLocked] = useState(false);
+  const [disconnectReason, setDisconnectReason] = useState<string | null>(null);
   const [renderDistance, setRenderDistance] = useState(() => {
     const saved = localStorage.getItem('vaste_renderDistance');
     const value = saved ? parseInt(saved) : 4;
@@ -220,6 +222,11 @@ export function Game({ serverUrl, user }: GameProps) {
         // Blockpacks are ready!
         console.log('[Game] Blockpacks ready, can initialize textures now');
         setBlockpacksReady(true);
+      },
+      (reason) => {
+        // Handle disconnect with reason
+        console.log('[Game] Disconnected:', reason);
+        setDisconnectReason(reason || 'Disconnected from server');
       }
     );
     network.setOnWorldAssigned((spawn, serverSettings) => {
@@ -943,6 +950,14 @@ export function Game({ serverUrl, user }: GameProps) {
         fogEnabled={fogEnabled}
         onFogChange={handleFogChange}
       />
+
+      {/* Disconnected Screen */}
+      {disconnectReason && (
+        <DisconnectedScreen
+          reason={disconnectReason}
+          onReturnToServerList={() => navigate('/servers')}
+        />
+      )}
     </div>
   );
 }

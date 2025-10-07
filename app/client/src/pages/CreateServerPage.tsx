@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { gameServerService } from "../services/gameServerService";
-import Button from "../components/ui/Button";
+import { Button, Input } from "../components/ui";
 
 const CreateServerPage: React.FC = () => {
   const [name, setName] = useState("");
@@ -130,25 +130,14 @@ const CreateServerPage: React.FC = () => {
       {error && <div style={errorStyle}>{error}</div>}
 
       <form onSubmit={handleSubmit} style={formStyle}>
-        <div style={fieldStyle}>
-          <label style={labelStyle}>Server Name *</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={inputStyle}
-            placeholder="Enter server name"
-            required
-            onFocus={(e) => {
-              e.target.style.borderColor = "rgba(255, 255, 255, 0.4)";
-              e.target.style.background = "rgba(255, 255, 255, 0.08)";
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = "rgba(255, 255, 255, 0.2)";
-              e.target.style.background = "rgba(255, 255, 255, 0.05)";
-            }}
-          />
-        </div>
+        <Input
+          label="Server Name *"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Enter server name"
+          required
+        />
 
         <div style={fieldStyle}>
           <label style={labelStyle}>Description</label>
@@ -168,25 +157,14 @@ const CreateServerPage: React.FC = () => {
           />
         </div>
 
-        <div style={fieldStyle}>
-          <label style={labelStyle}>WebSocket URL *</label>
-          <input
-            type="text"
-            value={websocketUrl}
-            onChange={(e) => setWebsocketUrl(e.target.value)}
-            style={inputStyle}
-            placeholder="ws://localhost:25565"
-            required
-            onFocus={(e) => {
-              e.target.style.borderColor = "rgba(255, 255, 255, 0.4)";
-              e.target.style.background = "rgba(255, 255, 255, 0.08)";
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = "rgba(255, 255, 255, 0.2)";
-              e.target.style.background = "rgba(255, 255, 255, 0.05)";
-            }}
-          />
-        </div>
+        <Input
+          label="WebSocket URL *"
+          type="text"
+          value={websocketUrl}
+          onChange={(e) => setWebsocketUrl(e.target.value)}
+          placeholder="ws://localhost:25565"
+          required
+        />
 
         <div style={actionsStyle}>
           <Button variant="secondary" onClick={() => navigate("/my-servers")} disabled={loading}>

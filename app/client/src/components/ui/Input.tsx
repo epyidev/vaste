@@ -1,91 +1,111 @@
-import React from 'react';
+import React, { useState, InputHTMLAttributes } from 'react';
 
-export interface InputProps {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  disabled?: boolean;
-  type?: 'text' | 'password' | 'email' | 'url';
+/**
+ * Props for the standardized Input component
+ * Extends native HTML input attributes for full compatibility
+ */
+export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+  /** Input label displayed above the field */
   label?: string;
+  /** Error message to display below the field */
   error?: string;
-  fullWidth?: boolean;
-  className?: string;
-  style?: React.CSSProperties;
 }
 
-const Input: React.FC<InputProps> = ({
-  value,
-  onChange,
-  placeholder = '',
-  disabled = false,
-  type = 'text',
-  label,
-  error,
-  fullWidth = false,
-  className = '',
-  style = {},
+/**
+ * Standardized input component matching the design system of PauseMenu/SettingsMenu
+ * 
+ * Features:
+ * - Consistent styling with 2px border and rgba backgrounds
+ * - Focus/blur state management with smooth transitions
+ * - Optional label and error message support
+ * - Full native input attribute support
+ * 
+ * @example
+ * ```tsx
+ * <Input 
+ *   label="Email" 
+ *   type="email" 
+ *   placeholder="Enter your email"
+ *   value={email}
+ *   onChange={(e) => setEmail(e.target.value)}
+ * />
+ * ```
+ */
+const Input: React.FC<InputProps> = ({ 
+  label, 
+  error, 
+  style,
+  ...props 
 }) => {
-  const baseStyles: React.CSSProperties = {
-    backgroundColor: '#0d0d0d',
-    border: `1px solid ${error ? '#666' : '#333'}`,
-    borderRadius: '8px',
+  const [isFocused, setIsFocused] = useState(false);
+
+  // Container style for label + input + error
+  const containerStyles: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem',
+    width: '100%',
+  };
+
+  // Label style matching PauseMenu/SettingsMenu design
+  const labelStyles: React.CSSProperties = {
     color: '#ffffff',
-    fontSize: '15px',
+    fontSize: '1rem',
+    fontWeight: 'bold',
+    letterSpacing: '0.5px',
+  };
+
+  // Input base style matching the design system
+  const inputBaseStyles: React.CSSProperties = {
     padding: '12px 16px',
+    background: isFocused 
+      ? 'rgba(255, 255, 255, 0.08)' 
+      : 'rgba(255, 255, 255, 0.05)',
+    border: `2px solid ${isFocused 
+      ? 'rgba(255, 255, 255, 0.4)' 
+      : error 
+        ? 'rgba(239, 68, 68, 0.5)' 
+        : 'rgba(255, 255, 255, 0.2)'}`,
+    borderRadius: '4px',
+    color: '#ffffff',
+    fontSize: '1rem',
     outline: 'none',
-    transition: 'all 0.2s ease-in-out',
-    width: fullWidth ? '100%' : 'auto',
-    boxSizing: 'border-box',
+    transition: 'all 0.2s ease',
     fontFamily: 'inherit',
+  };
+
+  // Error message style
+  const errorStyles: React.CSSProperties = {
+    color: 'rgba(239, 68, 68, 0.9)',
+    fontSize: '0.875rem',
+    marginTop: '-0.25rem',
+  };
+
+  // Merge custom styles with base styles
+  const mergedStyles: React.CSSProperties = {
+    ...inputBaseStyles,
     ...style,
   };
 
-  const labelStyles: React.CSSProperties = {
-    display: 'block',
-    marginBottom: '8px',
-    fontSize: '14px',
-    fontWeight: '500',
-    color: '#ffffff',
-  };
-
-  const errorStyles: React.CSSProperties = {
-    marginTop: '4px',
-    fontSize: '12px',
-    color: '#999',
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(e.target.value);
-  };
-
   return (
-    <div className={className} style={{ width: fullWidth ? '100%' : 'auto' }}>
+    <div style={containerStyles}>
       {label && <label style={labelStyles}>{label}</label>}
       <input
-        type={type}
-        value={value}
-        onChange={handleChange}
-        placeholder={placeholder}
-        disabled={disabled}
-        style={{
-          ...baseStyles,
-          opacity: disabled ? 0.5 : 1,
-          cursor: disabled ? 'not-allowed' : 'text',
-        }}
+        {...props}
+        style={mergedStyles}
         onFocus={(e) => {
-          if (!disabled) {
-            e.target.style.borderColor = error ? '#666' : '#555';
-            e.target.style.backgroundColor = '#111';
-          }
+          setIsFocused(true);
+          props.onFocus?.(e);
         }}
         onBlur={(e) => {
-          e.target.style.borderColor = error ? '#666' : '#333';
-          e.target.style.backgroundColor = '#0d0d0d';
+          setIsFocused(false);
+          props.onBlur?.(e);
         }}
       />
-      {error && <div style={errorStyles}>{error}</div>}
+      {error && <span style={errorStyles}>{error}</span>}
     </div>
   );
 };
 
 export default Input;
+

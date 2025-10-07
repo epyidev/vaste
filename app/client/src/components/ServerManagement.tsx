@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { gameServerService, GameServer } from '../services/gameServerService';
-import Button from './ui/Button';
+import { Button } from './ui/Button';
 
 const ServerManagement: React.FC = () => {
   const [servers, setServers] = useState<GameServer[]>([]);

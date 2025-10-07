@@ -78,6 +78,7 @@ export class NetworkManager {
   private gameState: GameState;
   private onStateUpdate: (state: GameState) => void;
   private onConnectionChange: (connected: boolean) => void;
+  private onDisconnect?: (reason?: string) => void;
   private onWorldAssigned?: (
     spawnPoint: { x: number; y: number; z: number },
     serverSettings?: { maxRenderDistance?: number; forceRenderDistance?: boolean }
@@ -92,7 +93,8 @@ export class NetworkManager {
     onConnectionChange: (connected: boolean) => void,
     user?: any,
     onLoadingStep?: (name: string, status: LoadingStep['status'], detail?: string) => void,
-    onBlockpacksReady?: () => void
+    onBlockpacksReady?: () => void,
+    onDisconnect?: (reason?: string) => void
   ) {
     this.gameState = {
       playerId: null,
@@ -109,6 +111,7 @@ export class NetworkManager {
     this.authenticatedUser = user || null;
     this.onLoadingStep = onLoadingStep;
     this.onBlockpacksReady = onBlockpacksReady;
+    this.onDisconnect = onDisconnect;
   }
 
   setAuthenticatedUser(user: any) {
@@ -276,11 +279,25 @@ export class NetworkManager {
           }
         };
 
-        this.ws.onclose = () => {
+        this.ws.onclose = (event) => {
           logger.info("[Network] Disconnected from server");
           this.gameState.connected = false;
           this.gameState.worldAssigned = false;
           this.onConnectionChange(false);
+          
+          // Handle disconnect reason
+          let disconnectReason = "Disconnected from server";
+          if (event.code === 1000 && event.reason) {
+            // Normal closure with reason
+            disconnectReason = event.reason;
+          } else if (event.code === 1008) {
+            // Policy violation (authentication failed, already connected, etc.)
+            disconnectReason = event.reason || "Authentication error";
+          }
+          
+          if (this.onDisconnect) {
+            this.onDisconnect(disconnectReason);
+          }
         };
 
         this.ws.onerror = (error) => {

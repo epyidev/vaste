@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { gameServerService, GameServer } from "../services/gameServerService";
-import Button from "../components/ui/Button";
+import { Button } from "../components/ui/Button";
 
 const MyServerDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -321,7 +321,7 @@ const MyServerDetailPage: React.FC = () => {
         <Button variant="secondary" onClick={handleToggleLicense}>
           {server.is_license_active ? "Deactivate" : "Activate"} License
         </Button>
-        <Button variant="danger" onClick={handleDeleteServer}>
+        <Button variant="primary" onClick={handleDeleteServer}>
           Delete Server
         </Button>
       </div>
