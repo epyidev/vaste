@@ -39,6 +39,7 @@ import { PlayerController } from "./components/PlayerController";
 import { BlockSelector } from "./components/BlockSelector";
 import { RawPointerLockControls } from "./components/RawPointerLockControls";
 import { ViewBobbingManager } from "./components/ViewBobbingManager";
+import { OtherPlayers } from "./components/OtherPlayers";
 import LoadingScreen from "./components/ui/LoadingScreen";
 import { LoadingStep } from "./components/ui";
 import { PauseMenu } from "./components/ui/PauseMenu";
@@ -59,6 +60,8 @@ export function Game({ serverUrl, user }: GameProps) {
   const [connected, setConnected] = useState(false);
   const [spawnPoint, setSpawnPoint] = useState({ x: 0, y: 50, z: 0 });
   const [chunks, setChunks] = useState<Map<string, any>>(new Map());
+  const [players, setPlayers] = useState<Map<string, any>>(new Map());
+  const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [playerPos, setPlayerPos] = useState({ x: 0, y: 0, z: 0 });
   const playerPosVector = useRef(new THREE.Vector3(0, 0, 0));
   const playerPhysicsPositionRef = useRef(new THREE.Vector3(0, 0, 0));
@@ -197,6 +200,12 @@ export function Game({ serverUrl, user }: GameProps) {
       (state) => {
         // Update chunks whenever state changes
         setChunks(new Map(state.chunks));
+        // Update players state
+        setPlayers(new Map(state.players));
+        // Update current player ID
+        if (state.playerId) {
+          setCurrentPlayerId(state.playerId);
+        }
       },
       (isConnected) => {
         setConnected(isConnected);
@@ -861,6 +870,12 @@ export function Game({ serverUrl, user }: GameProps) {
           ambientOcclusionEnabled={ambientOcclusionEnabled} 
           shadowsEnabled={shadowsEnabled}
           blockpacksReady={blockpacksReady}
+        />
+        
+        {/* Other Players */}
+        <OtherPlayers 
+          players={players}
+          currentPlayerId={currentPlayerId}
         />
       </Canvas>
       </div>

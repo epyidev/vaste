@@ -576,13 +576,13 @@ export function PlayerController({
       lastChunkUpdate.current = now;
     }
 
-    if (networkManager && now - lastNetworkUpdate.current > 100) {
-      networkManager.sendMessage({
-        type: "player_move",
-        x: position.current.x,
-        y: position.current.y,
-        z: position.current.z
-      });
+    // Send position updates every 50ms (20 updates/second) for smoother multiplayer
+    if (networkManager && now - lastNetworkUpdate.current > 50) {
+      networkManager.sendPlayerMove(
+        position.current.x,
+        position.current.y,
+        position.current.z
+      );
       lastNetworkUpdate.current = now;
     }
   });

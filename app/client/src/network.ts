@@ -240,6 +240,10 @@ export class NetworkManager {
           if (this.authenticatedUser) {
             this.onLoadingStep?.('Authenticating', 'loading', `Logging in as ${this.authenticatedUser.username}...`);
             const token = localStorage.getItem("vaste_token");
+            
+            // Set player ID from authenticated user
+            this.gameState.playerId = this.authenticatedUser.id;
+            
             this.sendMessage({
               type: "auth_info",
               username: this.authenticatedUser.username,

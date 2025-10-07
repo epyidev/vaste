@@ -468,6 +468,22 @@ class GameServer {
         throw new Error("Invalid user data received from backend");
       }
 
+      // Check if this user is already connected
+      const existingPlayer = this.players.get(user.id);
+      if (existingPlayer) {
+        log(`User ${user.username} (ID: ${user.id}) is already connected. Disconnecting old connection.`, "WARN");
+        
+        // Disconnect the old connection
+        try {
+          existingPlayer.ws.close(1000, "Account connected from another location");
+        } catch (error) {
+          log(`Error closing existing connection: ${error.message}`, "ERROR");
+        }
+        
+        // Clean up old player data
+        this.handlePlayerDisconnect(user.id);
+      }
+
       log(`User authenticated: ${user.username} (ID: ${user.id})`);
 
       // Clear auth timeout
@@ -947,7 +963,13 @@ class GameServer {
     // Update entity position in mod system
     this.modSystem.onPlayerMove(player, { x, y, z });
 
-    // Broadcast to other players
+    /**
+     * Real-time position broadcast
+     * - Processed as high priority (bypasses queue)
+     * - Client sends updates at 50ms intervals (20 updates/second)
+     * - Client-side prediction and interpolation handles smooth rendering
+     * - Immediate broadcast ensures minimal multiplayer latency
+     */
     this.broadcastToOthers(playerId, {
       type: "player_move",
       id: playerId,
