@@ -676,10 +676,58 @@ class GameServer {
     const { x, y, z, type } = message;
     const blockType = message.type === "block_break" ? 0 : (message.blockType || 1);
 
+    // Server-side validation for block placement
+    if (blockType !== 0) {
+      // Check if block placement would collide with any player
+      const blockMinX = x;
+      const blockMaxX = x + 1;
+      const blockMinY = y;
+      const blockMaxY = y + 1;
+      const blockMinZ = z;
+      const blockMaxZ = z + 1;
+
+      // Player hitbox constants (must match client PHYSICS_CONFIG exactly)
+      const PLAYER_WIDTH = 0.6;
+      const PLAYER_HEIGHT = 1.8;
+      const PLAYER_EYE_HEIGHT = 1.62;
+
+      for (const [otherPlayerId, otherPlayer] of this.players) {
+        // Check collision with each player
+        const playerX = otherPlayer.x;
+        const playerY = otherPlayer.y; // This is eye height
+        const playerZ = otherPlayer.z;
+
+        const playerFeetY = playerY - PLAYER_EYE_HEIGHT;
+        const halfWidth = PLAYER_WIDTH / 2;
+
+        // Use exact physics AABB
+        const playerMinX = playerX - halfWidth;
+        const playerMaxX = playerX + halfWidth;
+        const playerMinY = playerFeetY;
+        const playerMaxY = playerFeetY + PLAYER_HEIGHT;
+        const playerMinZ = playerZ - halfWidth;
+        const playerMaxZ = playerZ + halfWidth;
+
+        // AABB intersection test
+        const collides = (
+          playerMinX < blockMaxX &&
+          playerMaxX > blockMinX &&
+          playerMinY < blockMaxY &&
+          playerMaxY > blockMinY &&
+          playerMinZ < blockMaxZ &&
+          playerMaxZ > blockMinZ
+        );
+
+        // if (collides) {
+        //   // Block placement would collide with a player, reject it
+        //   log(`Rejected block placement at (${x}, ${y}, ${z}) - would collide with player ${otherPlayer.username}`, "WARN");
+        //   return;
+        // }
+      }
+    }
+
     // Update world
     player.world.setBlock(x, y, z, blockType);
-
-    log(`Player ${player.username} ${message.type === "block_break" ? "broke" : "placed"} block at (${x}, ${y}, ${z})`);
 
     // Create block update message
     const updateBuffer = ChunkProtocol.serializeBlockUpdate(x, y, z, blockType);

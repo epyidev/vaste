@@ -113,6 +113,9 @@ export class VoxelPhysics {
   /**
    * Sweep AABB along velocity vector and resolve collisions
    * Returns final position, whether player is on ground, and the block ID beneath the player
+   * 
+   * If player is stuck inside a block, allows movement in any direction that reduces overlap
+   * to help player escape the stuck state.
    */
   static sweepAABB(
     chunks: Map<string, any>,
@@ -126,6 +129,11 @@ export class VoxelPhysics {
     let onGround = false;
     let groundBlockId = 0;
 
+    // Check current position for being stuck in blocks
+    const currentAABB = this.createAABB(position.x, position.y, position.z, width, height);
+    const currentCollisions = this.getCollisionBlocks(chunks, currentAABB);
+    const isStuckInBlock = currentCollisions.length > 0;
+
     // Check if we can move to new position
     const playerAABB = this.createAABB(newPos.x, newPos.y, newPos.z, width, height);
     const collisionBlocks = this.getCollisionBlocks(chunks, playerAABB);
@@ -135,7 +143,14 @@ export class VoxelPhysics {
       return { position: newPos, onGround: false, velocity: finalVelocity, groundBlockId: 0 };
     }
 
-    // Simple collision resolution: move axis by axis
+    // If stuck in block, allow movement that reduces collision count
+    // This helps player escape when stuck
+    if (isStuckInBlock && collisionBlocks.length <= currentCollisions.length) {
+      // Movement is helping to escape, allow it
+      return { position: newPos, onGround: false, velocity: finalVelocity, groundBlockId: 0 };
+    }
+
+    // Normal collision resolution: move axis by axis
     const result = position.clone();
 
     // Try X movement
@@ -144,7 +159,9 @@ export class VoxelPhysics {
       testX.x += velocity.x;
       const aabbX = this.createAABB(testX.x, testX.y, testX.z, width, height);
       const blocksX = this.getCollisionBlocks(chunks, aabbX);
-      if (blocksX.length === 0) {
+      
+      // Allow movement if not stuck, or if stuck and movement helps escape
+      if (blocksX.length === 0 || (isStuckInBlock && blocksX.length <= currentCollisions.length)) {
         result.x = testX.x;
       } else {
         finalVelocity.x = 0;
@@ -157,7 +174,9 @@ export class VoxelPhysics {
       testY.y += velocity.y;
       const aabbY = this.createAABB(testY.x, testY.y, testY.z, width, height);
       const blocksY = this.getCollisionBlocks(chunks, aabbY);
-      if (blocksY.length === 0) {
+      
+      // Allow movement if not stuck, or if stuck and movement helps escape
+      if (blocksY.length === 0 || (isStuckInBlock && blocksY.length <= currentCollisions.length)) {
         result.y = testY.y;
       } else {
         finalVelocity.y = 0;
@@ -173,7 +192,9 @@ export class VoxelPhysics {
       testZ.z += velocity.z;
       const aabbZ = this.createAABB(testZ.x, testZ.y, testZ.z, width, height);
       const blocksZ = this.getCollisionBlocks(chunks, aabbZ);
-      if (blocksZ.length === 0) {
+      
+      // Allow movement if not stuck, or if stuck and movement helps escape
+      if (blocksZ.length === 0 || (isStuckInBlock && blocksZ.length <= currentCollisions.length)) {
         result.z = testZ.z;
       } else {
         finalVelocity.z = 0;
@@ -197,9 +218,9 @@ export class VoxelPhysics {
    * Check if movement along X axis would cause player to fall off edge
    * Returns true if the movement should be blocked to prevent falling
    * 
-   * This implementation checks if the player's hitbox would have ANY solid ground
-   * support after the movement. It allows the player to get as close to the edge
-   * as physically possible (even 1 pixel of hitbox overlap is enough).
+   * Proper edge detection: player needs at least some portion of their hitbox
+   * to be supported by solid ground. We check the actual overlap between the
+   * player's hitbox and the blocks below.
    * 
    * @param chunks - World chunk data
    * @param currentPos - Current player feet position
@@ -220,52 +241,61 @@ export class VoxelPhysics {
     const halfWidth = width / 2;
     const newX = currentPos.x + deltaX;
     
-    // Calculate the full range of the player's hitbox after movement
-    const minX = newX - halfWidth;
-    const maxX = newX + halfWidth;
-    const minZ = currentPos.z - halfWidth;
-    const maxZ = currentPos.z + halfWidth;
+    // Calculate player hitbox after movement
+    const playerMinX = newX - halfWidth;
+    const playerMaxX = newX + halfWidth;
+    const playerMinZ = currentPos.z - halfWidth;
+    const playerMaxZ = currentPos.z + halfWidth;
     
-    // Get all block positions that could potentially support the player
-    const blockMinX = Math.floor(minX);
-    const blockMaxX = Math.floor(maxX);
-    const blockMinZ = Math.floor(minZ);
-    const blockMaxZ = Math.floor(maxZ);
-    const blockY = Math.floor(currentPos.y - 0.01); // Just below feet
+    // Check the block layer directly below the player's feet
+    // Must be robust against floating point errors near integer boundaries
+    const feetY = currentPos.y;
+    const blockY = Math.floor(feetY - 0.05);
     
-    // Check if ANY block exists under the player's hitbox area
+    // Find all block positions that could support the player
+    const blockMinX = Math.floor(playerMinX);
+    const blockMaxX = Math.floor(playerMaxX);
+    const blockMinZ = Math.floor(playerMinZ);
+    const blockMaxZ = Math.floor(playerMaxZ);
+    
+    // Check each block position that could be under the player
     for (let bx = blockMinX; bx <= blockMaxX; bx++) {
       for (let bz = blockMinZ; bz <= blockMaxZ; bz++) {
-        // Check if this block position intersects with player's hitbox
+        if (!this.isBlockSolid(chunks, bx, blockY, bz)) {
+          continue;
+        }
+        
+        // Block is solid, check if it actually overlaps with player hitbox
         const blockMinBoundX = bx;
         const blockMaxBoundX = bx + 1;
         const blockMinBoundZ = bz;
         const blockMaxBoundZ = bz + 1;
         
-        // AABB intersection test
-        const intersects = !(
-          maxX <= blockMinBoundX ||
-          minX >= blockMaxBoundX ||
-          maxZ <= blockMinBoundZ ||
-          minZ >= blockMaxBoundZ
-        );
+        // Calculate actual overlap area
+        const overlapMinX = Math.max(playerMinX, blockMinBoundX);
+        const overlapMaxX = Math.min(playerMaxX, blockMaxBoundX);
+        const overlapMinZ = Math.max(playerMinZ, blockMinBoundZ);
+        const overlapMaxZ = Math.min(playerMaxZ, blockMaxBoundZ);
         
-        if (intersects && this.isBlockSolid(chunks, bx, blockY, bz)) {
-          return false; // Found ground support, safe to move
+        // Check if there's actual overlap
+        if (overlapMaxX > overlapMinX && overlapMaxZ > overlapMinZ) {
+          // Found solid ground support with actual overlap
+          return false;
         }
       }
     }
     
-    return true; // No ground support found, would fall
+    // No solid ground support found
+    return true;
   }
 
   /**
    * Check if movement along Z axis would cause player to fall off edge
    * Returns true if the movement should be blocked to prevent falling
    * 
-   * This implementation checks if the player's hitbox would have ANY solid ground
-   * support after the movement. It allows the player to get as close to the edge
-   * as physically possible (even 1 pixel of hitbox overlap is enough).
+   * Proper edge detection: player needs at least some portion of their hitbox
+   * to be supported by solid ground. We check the actual overlap between the
+   * player's hitbox and the blocks below.
    * 
    * @param chunks - World chunk data
    * @param currentPos - Current player feet position
@@ -286,44 +316,52 @@ export class VoxelPhysics {
     const halfWidth = width / 2;
     const newZ = currentPos.z + deltaZ;
     
-    // Calculate the full range of the player's hitbox after movement
-    const minX = currentPos.x - halfWidth;
-    const maxX = currentPos.x + halfWidth;
-    const minZ = newZ - halfWidth;
-    const maxZ = newZ + halfWidth;
+    // Calculate player hitbox after movement
+    const playerMinX = currentPos.x - halfWidth;
+    const playerMaxX = currentPos.x + halfWidth;
+    const playerMinZ = newZ - halfWidth;
+    const playerMaxZ = newZ + halfWidth;
     
-    // Get all block positions that could potentially support the player
-    const blockMinX = Math.floor(minX);
-    const blockMaxX = Math.floor(maxX);
-    const blockMinZ = Math.floor(minZ);
-    const blockMaxZ = Math.floor(maxZ);
-    const blockY = Math.floor(currentPos.y - 0.01); // Just below feet
+    // Check the block layer directly below the player's feet
+    // Must be robust against floating point errors near integer boundaries
+    const feetY = currentPos.y;
+    const blockY = Math.floor(feetY - 0.05);
     
-    // Check if ANY block exists under the player's hitbox area
+    // Find all block positions that could support the player
+    const blockMinX = Math.floor(playerMinX);
+    const blockMaxX = Math.floor(playerMaxX);
+    const blockMinZ = Math.floor(playerMinZ);
+    const blockMaxZ = Math.floor(playerMaxZ);
+    
+    // Check each block position that could be under the player
     for (let bx = blockMinX; bx <= blockMaxX; bx++) {
       for (let bz = blockMinZ; bz <= blockMaxZ; bz++) {
-        // Check if this block position intersects with player's hitbox
+        if (!this.isBlockSolid(chunks, bx, blockY, bz)) {
+          continue;
+        }
+        
+        // Block is solid, check if it actually overlaps with player hitbox
         const blockMinBoundX = bx;
         const blockMaxBoundX = bx + 1;
         const blockMinBoundZ = bz;
         const blockMaxBoundZ = bz + 1;
         
+        // Calculate actual overlap area
+        const overlapMinX = Math.max(playerMinX, blockMinBoundX);
+        const overlapMaxX = Math.min(playerMaxX, blockMaxBoundX);
+        const overlapMinZ = Math.max(playerMinZ, blockMinBoundZ);
+        const overlapMaxZ = Math.min(playerMaxZ, blockMaxBoundZ);
         
-        // AABB intersection test
-        const intersects = !(
-          maxX <= blockMinBoundX ||
-          minX >= blockMaxBoundX ||
-          maxZ <= blockMinBoundZ ||
-          minZ >= blockMaxBoundZ
-        );
-        
-        if (intersects && this.isBlockSolid(chunks, bx, blockY, bz)) {
-          return false; // Found ground support, safe to move
+        // Check if there's actual overlap
+        if (overlapMaxX > overlapMinX && overlapMaxZ > overlapMinZ) {
+          // Found solid ground support with actual overlap
+          return false;
         }
       }
     }
     
-    return true; // No ground support found, would fall
+    // No solid ground support found
+    return true;
   }
 
   /**

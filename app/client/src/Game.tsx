@@ -30,6 +30,7 @@ export function Game({ serverUrl, user }: GameProps) {
   const [chunks, setChunks] = useState<Map<string, any>>(new Map());
   const [playerPos, setPlayerPos] = useState({ x: 0, y: 0, z: 0 });
   const playerPosVector = useRef(new THREE.Vector3(0, 0, 0));
+  const playerPhysicsPositionRef = useRef(new THREE.Vector3(0, 0, 0));
   const [fps, setFps] = useState(0);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [showLoadingScreen, setShowLoadingScreen] = useState(true);
@@ -663,6 +664,7 @@ export function Game({ serverUrl, user }: GameProps) {
           networkManager={networkRef.current}
           onPositionChange={handlePlayerPositionChange}
           onMovementStateChange={handlePlayerMovementStateChange}
+          physicsPositionRef={playerPhysicsPositionRef}
           renderDistance={renderDistance}
           clearRequestedChunks={clearChunks}
           chunks={chunks}
@@ -680,7 +682,7 @@ export function Game({ serverUrl, user }: GameProps) {
         {/* Block Selection Outline */}
         <BlockSelector 
           networkManager={networkRef.current} 
-          playerPosition={playerPos}
+          physicsPositionRef={playerPhysicsPositionRef}
           isMenuOpen={isPaused || isSettingsOpen}
         />
         

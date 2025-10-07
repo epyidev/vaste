@@ -13,6 +13,7 @@ interface PlayerControllerProps {
   networkManager: NetworkManager | null;
   onPositionChange?: (pos: { x: number; y: number; z: number }) => void;
   onMovementStateChange?: (state: PlayerMovementState) => void;
+  physicsPositionRef?: React.MutableRefObject<THREE.Vector3>;
   renderDistance?: number;
   clearRequestedChunks?: boolean;
   chunks: Map<string, any>;
@@ -26,6 +27,7 @@ export function PlayerController({
   networkManager,
   onPositionChange,
   onMovementStateChange,
+  physicsPositionRef,
   renderDistance = 4,
   clearRequestedChunks,
   chunks
@@ -39,13 +41,20 @@ export function PlayerController({
   const keys = useRef<Record<string, boolean>>({});
   const onGround = useRef(false);
   const wasOnGround = useRef(false);
-  const jumpedWhileSprinting = useRef(false); // Track if current jump was a sprint jump
+  const jumpedWhileSprinting = useRef(false);
   const currentGroundBlockId = useRef(0);
 
   const lastNetworkUpdate = useRef(0);
   const lastChunkUpdate = useRef(0);
   const lastPositionUpdate = useRef(0);
   const requestedChunks = useRef(new Set<string>());
+
+  // Initialize physics position ref
+  useEffect(() => {
+    if (physicsPositionRef) {
+      physicsPositionRef.current.copy(position.current);
+    }
+  }, [physicsPositionRef]);
 
   useEffect(() => {
     position.current.set(
@@ -454,8 +463,14 @@ export function PlayerController({
 
     camera.position.copy(position.current);
 
+    // Update physics position ref every frame for accurate collision detection
+    if (physicsPositionRef) {
+      physicsPositionRef.current.copy(position.current);
+    }
+
     const now = Date.now();
 
+    // Network updates still throttled to avoid spam
     if (onPositionChange && now - lastPositionUpdate.current > 200) {
       onPositionChange({
         x: position.current.x,

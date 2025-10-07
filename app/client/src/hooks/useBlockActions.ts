@@ -11,17 +11,8 @@ interface UseBlockActionsReturn {
 }
 
 export function useBlockActions({ networkManager }: UseBlockActionsProps): UseBlockActionsReturn {
-  const lastActionTime = useRef(0);
-  const COOLDOWN_MS = 150;
-
   const breakBlock = useCallback((position: [number, number, number]) => {
     if (!networkManager) return;
-
-    const now = Date.now();
-    if (now - lastActionTime.current < COOLDOWN_MS) {
-      return;
-    }
-    lastActionTime.current = now;
 
     const [x, y, z] = position;
     networkManager.sendBlockBreak(x, y, z);
@@ -29,12 +20,6 @@ export function useBlockActions({ networkManager }: UseBlockActionsProps): UseBl
 
   const placeBlock = useCallback((position: [number, number, number]) => {
     if (!networkManager) return;
-
-    const now = Date.now();
-    if (now - lastActionTime.current < COOLDOWN_MS) {
-      return;
-    }
-    lastActionTime.current = now;
 
     const [x, y, z] = position;
     const blockId = 1;
