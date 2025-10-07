@@ -450,22 +450,22 @@ export function Game({ serverUrl, user }: GameProps) {
       }
 
       // Block common browser shortcuts when playing
+      // Note: We only preventDefault to block browser actions,
+      // but we DON'T stopPropagation to allow game input handlers to still work
       if (isPointerLocked) {
         // Ctrl/Cmd combinations
         if (e.ctrlKey || e.metaKey) {
           const blockedKeys = ['s', 'w', 'n', 't', 'r', 'f', 'h', 'p', 'o', 'g', 'u', 'j', 'd', 'l'];
           if (blockedKeys.includes(e.key.toLowerCase())) {
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
+            e.preventDefault(); // Prevent browser action (save, new window, etc.)
+            // Don't stop propagation - let game input handlers receive the event
           }
         }
 
         // F-keys (F1, F3, F5, F11, F12, etc.)
         if (e.key.startsWith('F') && e.key.length <= 3) {
-          e.preventDefault();
-          e.stopPropagation();
-          return false;
+          e.preventDefault(); // Prevent browser action (refresh, devtools, etc.)
+          // Don't stop propagation - let game input handlers receive the event
         }
       }
     };
