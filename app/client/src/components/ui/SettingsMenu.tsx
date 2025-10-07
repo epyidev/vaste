@@ -19,6 +19,8 @@ export interface SettingsMenuProps {
   onCinematicModeChange: (enabled: boolean) => void;
   viewBobbingEnabled: boolean;
   onViewBobbingChange: (enabled: boolean) => void;
+  fogEnabled: boolean;
+  onFogChange: (enabled: boolean) => void;
 }
 
 type SettingsTab = 'graphics' | 'mouse' | 'controls';
@@ -40,6 +42,8 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
   onCinematicModeChange,
   viewBobbingEnabled,
   onViewBobbingChange,
+  fogEnabled,
+  onFogChange,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('graphics');
   const [localRenderDistance, setLocalRenderDistance] = useState(currentRenderDistance);
@@ -247,7 +251,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
             <>
               <Slider
                 value={localRenderDistance}
-                min={2}
+                min={3}
                 max={maxRenderDistance}
                 onChange={setLocalRenderDistance}
                 label="RENDER DISTANCE"
@@ -255,7 +259,13 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                 disabled={forceRenderDistance}
               />
               
-              {/* Shadows Toggle - Maximum Quality */}
+              <ToggleButton
+                value={fogEnabled}
+                onChange={onFogChange}
+                label="FOG"
+                description="Distance fog that hides chunk boundaries at render distance. Recommended for better visual quality."
+              />
+              
               <ToggleButton
                 value={shadowsEnabled}
                 onChange={onShadowsEnabledChange}
@@ -263,7 +273,6 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                 description="Enable dynamic high-quality shadows from the sun (4096px). Disable for better performance."
               />
               
-              {/* Ambient Occlusion Toggle */}
               <ToggleButton
                 value={ambientOcclusionEnabled}
                 onChange={onAmbientOcclusionChange}
@@ -271,7 +280,6 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                 description="Adds realistic shadows in corners and crevices. May impact performance."
               />
               
-              {/* View Bobbing Toggle */}
               <ToggleButton
                 value={viewBobbingEnabled}
                 onChange={onViewBobbingChange}

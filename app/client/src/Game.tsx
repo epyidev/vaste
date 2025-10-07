@@ -70,9 +70,10 @@ export function Game({ serverUrl, user }: GameProps) {
   const [isPointerLocked, setIsPointerLocked] = useState(false);
   const [renderDistance, setRenderDistance] = useState(() => {
     const saved = localStorage.getItem('vaste_renderDistance');
-    return saved ? parseInt(saved) : 4;
+    const value = saved ? parseInt(saved) : 4;
+    return Math.max(3, value);
   });
-  const [maxRenderDistance, setMaxRenderDistance] = useState(12); // Default 12, server will override
+  const [maxRenderDistance, setMaxRenderDistance] = useState(12);
   const [forceRenderDistance, setForceRenderDistance] = useState<boolean>(false);
   const [ambientOcclusionEnabled, setAmbientOcclusionEnabled] = useState(() => {
     const saved = localStorage.getItem('vaste_ambientOcclusion');
@@ -99,7 +100,12 @@ export function Game({ serverUrl, user }: GameProps) {
   // View bobbing toggle
   const [viewBobbingEnabled, setViewBobbingEnabled] = useState(() => {
     const saved = localStorage.getItem('vaste_viewBobbing');
-    return saved !== null ? saved === 'true' : true; // Default enabled
+    return saved !== null ? saved === 'true' : true;
+  });
+
+  const [fogEnabled, setFogEnabled] = useState(() => {
+    const saved = localStorage.getItem('vaste_fogEnabled');
+    return saved !== null ? saved === 'true' : true;
   });
 
   // Player movement state for view bobbing
@@ -110,6 +116,7 @@ export function Game({ serverUrl, user }: GameProps) {
   
   const networkRef = useRef<NetworkManager | null>(null);
   const controlsRef = useRef<any>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
   const fpsCounterRef = useRef({ frames: 0, lastTime: performance.now() });
   const initialChunksLoadedRef = useRef(false);
   const justUnlockedRef = useRef(false); // Track if we just unlocked (transition period)
@@ -220,12 +227,12 @@ export function Game({ serverUrl, user }: GameProps) {
       }
       if (serverSettings?.forceRenderDistance === true) {
         setForceRenderDistance(true);
-        setRenderDistance(serverSettings.maxRenderDistance || 12);
-        localStorage.setItem('vaste_renderDistance', (serverSettings.maxRenderDistance || 12).toString());
+        const forcedDistance = Math.max(3, serverSettings.maxRenderDistance || 12);
+        setRenderDistance(forcedDistance);
+        localStorage.setItem('vaste_renderDistance', forcedDistance.toString());
       } else {
-        // Clamp client render distance to server max
         const currentRenderDistance = parseInt(localStorage.getItem('vaste_renderDistance') || '4');
-        const clampedRenderDistance = Math.min(currentRenderDistance, serverSettings?.maxRenderDistance || 12);
+        const clampedRenderDistance = Math.max(3, Math.min(currentRenderDistance, serverSettings?.maxRenderDistance || 12));
         setRenderDistance(clampedRenderDistance);
         localStorage.setItem('vaste_renderDistance', clampedRenderDistance.toString());
       }
@@ -239,6 +246,13 @@ export function Game({ serverUrl, user }: GameProps) {
     
     return () => network.disconnect();
   }, [serverUrl, user]);
+
+  useEffect(() => {
+    if (sceneRef.current) {
+      const bgColor = fogEnabled ? "#c8d5e0" : "#87CEEB";
+      sceneRef.current.background = new THREE.Color(bgColor);
+    }
+  }, [fogEnabled]);
 
   /**
    * Chunk garbage collection
@@ -612,10 +626,9 @@ export function Game({ serverUrl, user }: GameProps) {
    */
   const handleRenderDistanceChange = (newDistance: number) => {
     if (forceRenderDistance === true) {
-      // Can't change if forced by server
       return;
     }
-    const clampedDistance = Math.min(newDistance, maxRenderDistance);
+    const clampedDistance = Math.max(3, Math.min(newDistance, maxRenderDistance));
     const oldDistance = renderDistance;
     
     setRenderDistance(clampedDistance);
@@ -681,6 +694,11 @@ export function Game({ serverUrl, user }: GameProps) {
   const handleViewBobbingChange = (enabled: boolean) => {
     setViewBobbingEnabled(enabled);
     localStorage.setItem('vaste_viewBobbing', enabled.toString());
+  };
+
+  const handleFogChange = (enabled: boolean) => {
+    setFogEnabled(enabled);
+    localStorage.setItem('vaste_fogEnabled', enabled.toString());
   };
 
   const handlePlayerPositionChange = (pos: { x: number; y: number; z: number }) => {
@@ -754,6 +772,17 @@ export function Game({ serverUrl, user }: GameProps) {
           far: 1000
         }}
         shadows={shadowSettings.enabled}
+        gl={{ 
+          antialias: true,
+          alpha: false,
+          preserveDrawingBuffer: false
+        }}
+        onCreated={({ scene, gl }) => {
+          sceneRef.current = scene;
+          const bgColor = fogEnabled ? "#c8d5e0" : "#87CEEB";
+          scene.background = new THREE.Color(bgColor);
+          gl.setClearColor(bgColor);
+        }}
       >
         {/* Controls */}
         <RawPointerLockControls 
@@ -792,16 +821,14 @@ export function Game({ serverUrl, user }: GameProps) {
           isMenuOpen={isPaused || isSettingsOpen}
         />
         
-        {/* Sky */}
         <Sky
           distance={450000}
-          sunPosition={[100, 50, 50]} // Soleil plus haut et sur le côté
+          sunPosition={[100, 50, 50]}
           inclination={0.6}
           azimuth={0.25}
         />
         
-        {/* Lighting - Adjusted for professional voxel shading */}
-        <ambientLight intensity={0.65} /> {/* Increased base light since AO handles local shadows */}
+        <ambientLight intensity={0.65} />
         <directionalLight
           position={[80, 100, 60]} // Sun position: high and to the side
           intensity={shadowsEnabled ? 0.8 : 0.6} // Reduced intensity - vertex colors handle most shading
@@ -817,8 +844,16 @@ export function Game({ serverUrl, user }: GameProps) {
           shadow-radius={shadowSettings.radius}
         />
         
-        {/* Fog */}
-        <fog attach="fog" args={["#87CEEB", 80, 200]} />
+        {fogEnabled && (
+          <fog 
+            attach="fog" 
+            args={[
+              "#c8d5e0",
+              renderDistance * 16 * 0.4,
+              renderDistance * 16 * 1.0
+            ]} 
+          />
+        )}
         
         {/* Voxel World */}
         <VoxelWorld 
@@ -890,6 +925,8 @@ export function Game({ serverUrl, user }: GameProps) {
         onCinematicModeChange={handleCinematicModeChange}
         viewBobbingEnabled={viewBobbingEnabled}
         onViewBobbingChange={handleViewBobbingChange}
+        fogEnabled={fogEnabled}
+        onFogChange={handleFogChange}
       />
     </div>
   );
