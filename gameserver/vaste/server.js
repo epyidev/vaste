@@ -593,13 +593,8 @@ class GameServer {
               // Get or generate chunk
               const chunk = world.getOrGenerateChunk(cx, cy, cz);
               
-              // Skip empty chunks
-              if (chunk.isEmpty()) {
-                player.loadedChunks.add(chunkKey);
-                continue;
-              }
-
-              // Serialize and send chunk
+              // Always send chunks, even if empty (all air)
+              // Client needs empty chunks to allow block placement in air
               const buffer = ChunkProtocol.serializeChunk(chunk);
               player.ws.send(buffer);
               
@@ -787,13 +782,13 @@ class GameServer {
     try {
       const chunk = player.world.getOrGenerateChunk(cx, cy, cz);
       
-      if (!chunk.isEmpty()) {
-        const buffer = ChunkProtocol.serializeChunk(chunk);
-        player.ws.send(buffer);
-        
-        const chunkKey = `${cx},${cy},${cz}`;
-        player.loadedChunks.add(chunkKey);
-      }
+      // Always send chunks, even if empty (all air)
+      // Client needs to know the chunk exists to allow block placement
+      const buffer = ChunkProtocol.serializeChunk(chunk);
+      player.ws.send(buffer);
+      
+      const chunkKey = `${cx},${cy},${cz}`;
+      player.loadedChunks.add(chunkKey);
     } catch (err) {
       log(`Error handling chunk request from ${player.username}: ${err.message}`, "ERROR");
       error(`Stack trace: ${err.stack}`);
