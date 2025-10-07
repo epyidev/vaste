@@ -745,9 +745,6 @@ class GameServer {
         
         const chunkKey = `${cx},${cy},${cz}`;
         player.loadedChunks.add(chunkKey);
-        log(`Sent chunk (${cx}, ${cy}, ${cz}) to ${player.username}`, "DEBUG");
-      } else {
-        log(`Chunk (${cx}, ${cy}, ${cz}) is empty, not sending`, "DEBUG");
       }
     } catch (err) {
       log(`Error handling chunk request from ${player.username}: ${err.message}`, "ERROR");
