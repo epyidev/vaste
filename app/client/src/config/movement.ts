@@ -11,7 +11,7 @@ export const PHYSICS_CONFIG = {
 
   // Movement speeds (blocks per second)
   walkSpeed: 4.3,
-  sprintSpeed: 5.6,
+  sprintSpeed: 6.2,
   sneakSpeed: 2.295,
 
   // Acceleration (blocks per second²)
@@ -26,8 +26,8 @@ export const PHYSICS_CONFIG = {
   jumpVelocity: 8.4,
 
   // Momentum retention for chained jumps
-  momentumRetain: 0.85,
-  sneakJumpMomentumRetain: 0.4, // Reduced horizontal momentum when sneaking (jump height stays same)
+  momentumRetain: 0.95,
+  sneakJumpMomentumRetain: 0.6, // Reduced horizontal momentum when sneaking (jump height stays same)
 
   // Step height (auto-climb blocks)
   stepHeight: 0.6,
