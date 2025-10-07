@@ -75,71 +75,56 @@ export function VoxelWorld({ chunks, ambientOcclusionEnabled = true, shadowsEnab
 
     const manager = managerRef.current;
     const group = groupRef.current;
-    const existingKeys = new Set<string>();
 
-    group.children.forEach(child => {
-      if (child.userData.chunkKey) {
-        existingKeys.add(child.userData.chunkKey);
-      }
-    });
+    const currentKeys = new Set<string>();
+    for (const chunk of chunks.values()) {
+      currentKeys.add(`${chunk.cx},${chunk.cy},${chunk.cz}`);
+    }
 
-    for (const key of existingKeys) {
-      if (!chunks.has(key)) {
-        const [cx, cy, cz] = key.split(',').map(Number);
-        const child = group.children.find(c => c.userData.chunkKey === key);
-        if (child) group.remove(child);
-        manager.removeMesh(cx, cy, cz);
+    const childrenToRemove: THREE.Object3D[] = [];
+    for (const child of group.children) {
+      const key = child.userData.chunkKey;
+      if (key && !currentKeys.has(key)) {
+        childrenToRemove.push(child);
       }
     }
 
-    const chunkArray = Array.from(chunks.values());
-    const batchSize = 10;
-    let index = 0;
+    for (const child of childrenToRemove) {
+      const key = child.userData.chunkKey;
+      const [cx, cy, cz] = key.split(',').map(Number);
+      group.remove(child);
+      manager.removeMesh(cx, cy, cz);
+    }
 
-    const processBatch = () => {
-      const end = Math.min(index + batchSize, chunkArray.length);
+    for (const chunk of chunks.values()) {
+      const key = `${chunk.cx},${chunk.cy},${chunk.cz}`;
       
-      for (let i = index; i < end; i++) {
-        const chunk = chunkArray[i];
-        const key = `${chunk.cx},${chunk.cy},${chunk.cz}`;
-        
-        // Check if chunk exists and if version matches
-        const existingMesh = group.children.find(c => c.userData.chunkKey === key);
-        if (existingMesh && existingMesh.userData.version === chunk.version) {
-          // Mesh exists and is up to date, skip
-          continue;
-        }
-
-        // Remove old mesh if it exists (version mismatch)
-        if (existingMesh) {
-          group.remove(existingMesh);
-          manager.removeMesh(chunk.cx, chunk.cy, chunk.cz);
-        }
-
-        // Create new mesh
-        const mesh = manager.getOrCreateMesh({
-          cx: chunk.cx,
-          cy: chunk.cy,
-          cz: chunk.cz,
-          blocks: chunk.blocksArray,
-          version: chunk.version
-        });
-
-        if (mesh) {
-          mesh.userData.chunkKey = key;
-          mesh.userData.version = chunk.version; // Store version for comparison
-          mesh.name = `chunk-${key}`; // Add name for BlockSelector
-          group.add(mesh);
-        }
+      const existingChild = group.children.find(c => c.userData.chunkKey === key);
+      
+      if (existingChild && existingChild.userData.version === chunk.version) {
+        continue;
       }
 
-      index = end;
-      if (index < chunkArray.length) {
-        requestAnimationFrame(processBatch);
+      if (existingChild) {
+        group.remove(existingChild);
+        manager.removeMesh(chunk.cx, chunk.cy, chunk.cz);
       }
-    };
 
-    processBatch();
+      const mesh = manager.getOrCreateMesh({
+        cx: chunk.cx,
+        cy: chunk.cy,
+        cz: chunk.cz,
+        blocks: chunk.blocksArray,
+        version: chunk.version
+      });
+
+      if (mesh) {
+        mesh.userData.chunkKey = key;
+        mesh.userData.version = chunk.version;
+        mesh.name = `chunk-${key}`;
+        group.add(mesh);
+      }
+    }
   }, [chunks, ready]);
 
   if (!ready) {

@@ -19,7 +19,7 @@ interface CachedChunk {
 export class ChunkManager {
   private chunks = new Map<string, CachedChunk>();
   private material: THREE.Material;
-  private maxCached = 1000;
+  private maxCached = 200;
   private ambientOcclusionEnabled: boolean;
   private shadowsEnabled: boolean;
 
@@ -97,7 +97,7 @@ export class ChunkManager {
     const sorted = Array.from(this.chunks.entries())
       .sort((a, b) => a[1].lastAccess - b[1].lastAccess);
 
-    const toRemove = Math.floor(this.maxCached * 0.2);
+    const toRemove = this.chunks.size - this.maxCached;
     for (let i = 0; i < toRemove; i++) {
       const [key, cached] = sorted[i];
       cached.geometry.dispose();

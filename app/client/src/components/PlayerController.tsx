@@ -15,7 +15,6 @@ interface PlayerControllerProps {
   onMovementStateChange?: (state: PlayerMovementState) => void;
   physicsPositionRef?: React.MutableRefObject<THREE.Vector3>;
   renderDistance?: number;
-  clearRequestedChunks?: boolean;
   chunks: Map<string, any>;
 }
 
@@ -29,7 +28,6 @@ export function PlayerController({
   onMovementStateChange,
   physicsPositionRef,
   renderDistance = 4,
-  clearRequestedChunks,
   chunks
 }: PlayerControllerProps) {
   const position = useRef(new THREE.Vector3(
@@ -65,18 +63,19 @@ export function PlayerController({
     velocity.current.set(0, 0, 0);
 
     if (networkManager) {
+      /**
+       * Set initial player position in NetworkManager
+       * Enables chunk validation from the start
+       */
+      networkManager.setPlayerPosition({
+        x: spawnPoint.x,
+        y: spawnPoint.y,
+        z: spawnPoint.z
+      });
+      
       requestChunksAroundPlayer(spawnPoint.x, spawnPoint.y, spawnPoint.z);
     }
   }, [spawnPoint, networkManager]);
-
-  useEffect(() => {
-    if (clearRequestedChunks) {
-      requestedChunks.current.clear();
-      if (networkManager) {
-        networkManager.cancelPendingChunkRequests();
-      }
-    }
-  }, [clearRequestedChunks, networkManager]);
 
   const requestChunksAroundPlayer = (x: number, y: number, z: number) => {
     if (!networkManager) return;
@@ -97,7 +96,12 @@ export function PlayerController({
 
           if (distance <= renderDistance) {
             const chunkKey = `${cx},${cy},${cz}`;
-            if (!requestedChunks.current.has(chunkKey)) {
+            
+            /**
+             * Check both requestedChunks and loaded chunks to prevent duplicates
+             * This handles render distance changes without clearing chunk data
+             */
+            if (!requestedChunks.current.has(chunkKey) && !chunks.has(chunkKey)) {
               chunksToRequest.push({ cx, cy, cz, distance });
             }
           }
@@ -353,8 +357,20 @@ export function PlayerController({
     const moveDelta = velocity.current.clone().multiplyScalar(dt);
     const playerFeetY = position.current.y - PHYSICS_CONFIG.playerEyeHeight;
 
-    // Si aucun chunk chargé, physique simple
-    if (chunks.size === 0) {
+    /**
+     * Safety mechanism: Check if critical chunks are loaded
+     * Critical chunks are those directly around and below the player
+     * If missing, use simple physics to prevent falling through the world
+     */
+    const playerChunkX = Math.floor(position.current.x / CHUNK_SIZE);
+    const playerChunkY = Math.floor(position.current.y / CHUNK_SIZE);
+    const playerChunkZ = Math.floor(position.current.z / CHUNK_SIZE);
+    const criticalChunksLoaded = 
+      chunks.has(`${playerChunkX},${playerChunkY},${playerChunkZ}`) ||
+      chunks.has(`${playerChunkX},${playerChunkY - 1},${playerChunkZ}`);
+
+    // Si aucun chunk chargé OU chunks critiques manquants, physique simple de sécurité
+    if (chunks.size === 0 || !criticalChunksLoaded) {
       position.current.add(moveDelta);
       
       const groundLevel = spawnPoint.y;
@@ -472,11 +488,22 @@ export function PlayerController({
 
     // Network updates still throttled to avoid spam
     if (onPositionChange && now - lastPositionUpdate.current > 200) {
-      onPositionChange({
+      const currentPos = {
         x: position.current.x,
         y: position.current.y,
         z: position.current.z
-      });
+      };
+      
+      onPositionChange(currentPos);
+      
+      /**
+       * Update NetworkManager with player position
+       * Used for chunk validation - reject chunks outside render distance
+       */
+      if (networkManager) {
+        networkManager.setPlayerPosition(currentPos);
+      }
+      
       lastPositionUpdate.current = now;
     }
 
@@ -523,7 +550,28 @@ export function PlayerController({
       });
     }
 
-    if (networkManager && now - lastChunkUpdate.current > 500) {
+    if (networkManager && now - lastChunkUpdate.current > 200) {
+      const playerChunkX = Math.floor(position.current.x / CHUNK_SIZE);
+      const playerChunkY = Math.floor(position.current.y / CHUNK_SIZE);
+      const playerChunkZ = Math.floor(position.current.z / CHUNK_SIZE);
+      
+      const chunksToRemove: string[] = [];
+      requestedChunks.current.forEach(chunkKey => {
+        const [cx, cy, cz] = chunkKey.split(',').map(Number);
+        const dx = cx - playerChunkX;
+        const dy = cy - playerChunkY;
+        const dz = cz - playerChunkZ;
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        
+        if (distance > renderDistance + 1) {
+          chunksToRemove.push(chunkKey);
+        } else if (!chunks.has(chunkKey)) {
+          chunksToRemove.push(chunkKey);
+        }
+      });
+      
+      chunksToRemove.forEach(key => requestedChunks.current.delete(key));
+
       requestChunksAroundPlayer(position.current.x, position.current.y, position.current.z);
       lastChunkUpdate.current = now;
     }
