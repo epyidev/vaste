@@ -6,10 +6,15 @@ interface RawPointerLockControlsProps {
   sensitivity?: number;
   verticalClampDegrees?: number;
   cinematicMode?: boolean;
+  viewBobbingOffsets?: {
+    pitch: number;
+    yaw: number;
+    roll: number;
+  };
 }
 
 export const RawPointerLockControls = forwardRef<any, RawPointerLockControlsProps>(
-  ({ sensitivity = 0.002, verticalClampDegrees = 89, cinematicMode = false }, ref) => {
+  ({ sensitivity = 0.002, verticalClampDegrees = 89, cinematicMode = false, viewBobbingOffsets }, ref) => {
     const { camera, gl } = useThree();
     const isLocked = useRef(false);
     
@@ -81,7 +86,9 @@ export const RawPointerLockControls = forwardRef<any, RawPointerLockControlsProp
         if (!cinematicMode) {
           yaw.current = targetYaw.current;
           pitch.current = targetPitch.current;
-          camera.rotation.set(pitch.current, yaw.current, 0, 'YXZ');
+          
+          // Note: View bobbing offsets are applied in useFrame, not here
+          // This ensures we always use the latest offset values without dependency issues
         }
       };
 
@@ -94,14 +101,23 @@ export const RawPointerLockControls = forwardRef<any, RawPointerLockControlsProp
       };
     }, [camera, gl.domElement, sensitivity, verticalClamp, cinematicMode]);
 
-    // Cinematic smooth interpolation loop
+    // Apply camera rotation every frame
     useFrame(() => {
-      if (cinematicMode && isLocked.current) {
-        // Ultra smooth interpolation (0.05 = 5% per frame = très lent et smooth)
+      if (!isLocked.current) return;
+
+      // In cinematic mode, interpolate towards target
+      if (cinematicMode) {
         yaw.current = THREE.MathUtils.lerp(yaw.current, targetYaw.current, 0.05);
         pitch.current = THREE.MathUtils.lerp(pitch.current, targetPitch.current, 0.05);
-        camera.rotation.set(pitch.current, yaw.current, 0, 'YXZ');
       }
+      // In raw mode, yaw/pitch are already set in mousemove handler
+      
+      // Always apply view bobbing offsets (updated every frame via props)
+      const finalPitch = pitch.current + (viewBobbingOffsets?.pitch || 0);
+      const finalYaw = yaw.current + (viewBobbingOffsets?.yaw || 0);
+      const finalRoll = viewBobbingOffsets?.roll || 0;
+      
+      camera.rotation.set(finalPitch, finalYaw, finalRoll, 'YXZ');
     });
 
     return null;

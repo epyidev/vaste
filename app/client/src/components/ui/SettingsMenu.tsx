@@ -17,6 +17,8 @@ export interface SettingsMenuProps {
   onMouseSensitivityChange: (value: number) => void;
   cinematicMode: boolean;
   onCinematicModeChange: (enabled: boolean) => void;
+  viewBobbingEnabled: boolean;
+  onViewBobbingChange: (enabled: boolean) => void;
 }
 
 type SettingsTab = 'graphics' | 'mouse' | 'controls';
@@ -36,6 +38,8 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
   onMouseSensitivityChange,
   cinematicMode,
   onCinematicModeChange,
+  viewBobbingEnabled,
+  onViewBobbingChange,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('graphics');
   const [localRenderDistance, setLocalRenderDistance] = useState(currentRenderDistance);
@@ -265,6 +269,14 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                 onChange={onAmbientOcclusionChange}
                 label="AMBIENT OCCLUSION"
                 description="Adds realistic shadows in corners and crevices. May impact performance."
+              />
+              
+              {/* View Bobbing Toggle */}
+              <ToggleButton
+                value={viewBobbingEnabled}
+                onChange={onViewBobbingChange}
+                label="VIEW BOBBING"
+                description="Adds realistic camera movement when walking, running, or jumping. Creates immersive head bobbing and sway effects."
               />
             </>
           )}

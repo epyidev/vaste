@@ -5,12 +5,14 @@ import { NetworkManager } from "../network";
 import { VoxelPhysics } from "../physics/VoxelPhysics";
 import { PHYSICS_CONFIG } from "../config/movement";
 import { getBlockFriction } from "../data/BlockRegistry";
+import { PlayerMovementState } from "../config/viewBobbing";
 
 interface PlayerControllerProps {
   controlsRef: React.RefObject<any>;
   spawnPoint: { x: number; y: number; z: number };
   networkManager: NetworkManager | null;
   onPositionChange?: (pos: { x: number; y: number; z: number }) => void;
+  onMovementStateChange?: (state: PlayerMovementState) => void;
   renderDistance?: number;
   clearRequestedChunks?: boolean;
   chunks: Map<string, any>;
@@ -23,6 +25,7 @@ export function PlayerController({
   spawnPoint,
   networkManager,
   onPositionChange,
+  onMovementStateChange,
   renderDistance = 4,
   clearRequestedChunks,
   chunks
@@ -142,13 +145,16 @@ export function PlayerController({
     const justJumped = !onGround.current && wasOnGround.current;
     wasOnGround.current = onGround.current;
 
-    // Déterminer la vitesse cible selon le mode
-    // Note: Speed limits only apply when on ground. In air, momentum is preserved.
+    // Determine target speed based on mode
+    // Speed limits apply on ground. In air, we track intended speed for clamping.
     let speedTarget = PHYSICS_CONFIG.walkSpeed;
+    let isCurrentlySprinting = false;
+    
     if (sneak && onGround.current) {
       speedTarget = PHYSICS_CONFIG.sneakSpeed;
     } else if (sprint && forward) {
       speedTarget = PHYSICS_CONFIG.sprintSpeed;
+      isCurrentlySprinting = true;
     }
 
     // Smooth edge slowdown when sneaking
@@ -216,19 +222,31 @@ export function PlayerController({
       velocity.current.z += inputDirection.z * accel * dt;
     }
 
-    // Clamp de la vitesse horizontale selon le mode et edge proximity
+    // Clamp horizontal speed based on mode and edge proximity
+    // When on ground: enforce speed limits
+    // When in air: only clamp if above max sprint speed (preserve momentum)
     const horizontalSpeed = Math.sqrt(
       velocity.current.x * velocity.current.x + 
       velocity.current.z * velocity.current.z
     );
     
-    // Apply edge slowdown to speed target
-    const effectiveSpeedTarget = speedTarget * edgeSlowdownMultiplier;
-    
-    if (horizontalSpeed > effectiveSpeedTarget) {
-      const scale = effectiveSpeedTarget / horizontalSpeed;
-      velocity.current.x *= scale;
-      velocity.current.z *= scale;
+    if (onGround.current) {
+      // Apply edge slowdown to speed target
+      const effectiveSpeedTarget = speedTarget * edgeSlowdownMultiplier;
+      
+      if (horizontalSpeed > effectiveSpeedTarget) {
+        const scale = effectiveSpeedTarget / horizontalSpeed;
+        velocity.current.x *= scale;
+        velocity.current.z *= scale;
+      }
+    } else {
+      // In air: only clamp if exceeding max possible sprint speed
+      const maxAirSpeed = PHYSICS_CONFIG.sprintSpeed + PHYSICS_CONFIG.sprintJumpBoost;
+      if (horizontalSpeed > maxAirSpeed) {
+        const scale = maxAirSpeed / horizontalSpeed;
+        velocity.current.x *= scale;
+        velocity.current.z *= scale;
+      }
     }
 
     // ========================================
@@ -265,22 +283,39 @@ export function PlayerController({
     velocity.current.y -= PHYSICS_CONFIG.gravity * dt;
 
     // ========================================
-    // SAUT AVEC CONSERVATION DU MOMENTUM
+    // JUMP WITH MOMENTUM CONSERVATION
     // ========================================
     
     if (jump && onGround.current) {
       // Always jump at same height
       velocity.current.y = PHYSICS_CONFIG.jumpVelocity;
       
-      // Different horizontal momentum retention based on sneak state
+      // Calculate current horizontal speed
+      const horizontalSpeed = Math.sqrt(
+        velocity.current.x * velocity.current.x + 
+        velocity.current.z * velocity.current.z
+      );
+      
+      // Different horizontal momentum based on movement state
       if (sneak) {
         // Reduced horizontal momentum when sneaking (shorter jump distance)
         velocity.current.x *= PHYSICS_CONFIG.sneakJumpMomentumRetain;
         velocity.current.z *= PHYSICS_CONFIG.sneakJumpMomentumRetain;
       } else {
-        // Normal momentum retention
+        // Keep full momentum
         velocity.current.x *= PHYSICS_CONFIG.momentumRetain;
         velocity.current.z *= PHYSICS_CONFIG.momentumRetain;
+        
+        // Apply sprint jump boost if moving fast enough
+        if (sprint && horizontalSpeed >= PHYSICS_CONFIG.sprintJumpMinSpeed) {
+          // Calculate direction of movement
+          const dirX = velocity.current.x / horizontalSpeed;
+          const dirZ = velocity.current.z / horizontalSpeed;
+          
+          // Add boost in movement direction
+          velocity.current.x += dirX * PHYSICS_CONFIG.sprintJumpBoost;
+          velocity.current.z += dirZ * PHYSICS_CONFIG.sprintJumpBoost;
+        }
       }
       
       onGround.current = false;
@@ -412,6 +447,49 @@ export function PlayerController({
         z: position.current.z
       });
       lastPositionUpdate.current = now;
+    }
+
+    // Calculate and send movement state for view bobbing
+    if (onMovementStateChange) {
+      const horizontalSpeed = Math.sqrt(
+        velocity.current.x * velocity.current.x + 
+        velocity.current.z * velocity.current.z
+      );
+
+      const isMoving = horizontalSpeed > 0.1;
+      const isFalling = !onGround.current && velocity.current.y < -0.5;
+      const isJumping = !onGround.current && velocity.current.y > 0.5;
+
+      // Determine primary movement state
+      let state: PlayerMovementState['state'] = 'idle';
+      
+      if (isFalling) {
+        state = 'falling';
+      } else if (isJumping) {
+        state = 'jumping';
+      } else if (isMoving && onGround.current) {
+        if (sneak) {
+          state = 'sneaking';
+        } else if (sprint && forward) {
+          state = 'sprinting';
+        } else {
+          state = 'walking';
+        }
+      }
+
+      onMovementStateChange({
+        state,
+        horizontalSpeed,
+        verticalVelocity: velocity.current.y,
+        isOnGround: onGround.current,
+        isMoving,
+        isSneaking: sneak,
+        isSprinting: isCurrentlySprinting, // Use the tracked sprinting state
+        isJumping,
+        isFalling,
+        inputX: inputX,
+        inputZ: inputZ,
+      });
     }
 
     if (networkManager && now - lastChunkUpdate.current > 500) {

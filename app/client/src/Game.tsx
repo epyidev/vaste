@@ -7,11 +7,13 @@ import { VoxelWorld } from "./components/VoxelWorld";
 import { PlayerController } from "./components/PlayerController";
 import { BlockSelector } from "./components/BlockSelector";
 import { RawPointerLockControls } from "./components/RawPointerLockControls";
+import { ViewBobbingManager } from "./components/ViewBobbingManager";
 import LoadingScreen from "./components/ui/LoadingScreen";
 import { LoadingStep } from "./components/ui";
 import { PauseMenu } from "./components/ui/PauseMenu";
 import { SettingsMenu } from "./components/ui/SettingsMenu";
 import { useNavigate } from "react-router-dom";
+import { PlayerMovementState } from "./config/viewBobbing";
 
 interface GameProps {
   serverUrl: string;
@@ -61,6 +63,18 @@ export function Game({ serverUrl, user }: GameProps) {
     const saved = localStorage.getItem('vaste_cinematicMode');
     return saved !== null ? saved === 'true' : false; // Default disabled
   });
+
+  // View bobbing toggle
+  const [viewBobbingEnabled, setViewBobbingEnabled] = useState(() => {
+    const saved = localStorage.getItem('vaste_viewBobbing');
+    return saved !== null ? saved === 'true' : true; // Default enabled
+  });
+
+  // Player movement state for view bobbing
+  const [playerMovementState, setPlayerMovementState] = useState<PlayerMovementState | null>(null);
+
+  // View bobbing rotation offsets (managed by ViewBobbingManager, applied by RawPointerLockControls)
+  const [viewBobbingOffsets, setViewBobbingOffsets] = useState({ pitch: 0, yaw: 0, roll: 0 });
   
   const [clearChunks, setClearChunks] = useState(false);
   const networkRef = useRef<NetworkManager | null>(null);
@@ -556,9 +570,18 @@ export function Game({ serverUrl, user }: GameProps) {
     localStorage.setItem('vaste_cinematicMode', enabled.toString());
   };
 
+  const handleViewBobbingChange = (enabled: boolean) => {
+    setViewBobbingEnabled(enabled);
+    localStorage.setItem('vaste_viewBobbing', enabled.toString());
+  };
+
   const handlePlayerPositionChange = (pos: { x: number; y: number; z: number }) => {
     setPlayerPos(pos);
     playerPosVector.current.set(pos.x, pos.y, pos.z);
+  };
+
+  const handlePlayerMovementStateChange = (state: PlayerMovementState) => {
+    setPlayerMovementState(state);
   };
 
   const handleDisconnect = () => {
@@ -630,6 +653,7 @@ export function Game({ serverUrl, user }: GameProps) {
           sensitivity={mouseSensitivity}
           verticalClampDegrees={89}
           cinematicMode={isCinematicMode}
+          viewBobbingOffsets={viewBobbingOffsets}
         />
         
         {/* Player Controller */}
@@ -638,9 +662,19 @@ export function Game({ serverUrl, user }: GameProps) {
           spawnPoint={spawnPoint}
           networkManager={networkRef.current}
           onPositionChange={handlePlayerPositionChange}
+          onMovementStateChange={handlePlayerMovementStateChange}
           renderDistance={renderDistance}
           clearRequestedChunks={clearChunks}
           chunks={chunks}
+        />
+        
+        {/* View Bobbing Manager - Must be AFTER PlayerController to apply offsets */}
+        <ViewBobbingManager
+          cameraRef={controlsRef}
+          enabled={viewBobbingEnabled}
+          playerState={playerMovementState}
+          baseFOV={75}
+          onOffsetsUpdate={setViewBobbingOffsets}
         />
         
         {/* Block Selection Outline */}
@@ -746,6 +780,8 @@ export function Game({ serverUrl, user }: GameProps) {
         onMouseSensitivityChange={handleMouseSensitivityChange}
         cinematicMode={isCinematicMode}
         onCinematicModeChange={handleCinematicModeChange}
+        viewBobbingEnabled={viewBobbingEnabled}
+        onViewBobbingChange={handleViewBobbingChange}
       />
     </div>
   );
