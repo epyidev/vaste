@@ -12,9 +12,15 @@ const { log, warn, error } = require('./Logger');
  * INTERNAL SYSTEM (automatic):
  * - Blocks are loaded dynamically from blockpacks/ directory
  * - Each folder = 1 block (folder name doesn't matter, stringId in block.json does)
- * - Numeric IDs are generated at runtime for network efficiency
+ * - Numeric IDs are generated TEMPORARILY at runtime for network efficiency
  * - Server syncs mapping table to clients at connection
- * - World storage uses string IDs (future-proof, no conflicts)
+ * - World storage uses string IDs (persistent, future-proof, no conflicts)
+ * 
+ * IMPORTANT:
+ * - Numeric IDs are NEVER persisted to disk
+ * - Numeric IDs are regenerated at each server start
+ * - Different server restarts may have different numeric IDs for the same block
+ * - Missing blocks in world data are automatically converted to air
  * 
  * String ID format: "namespace:blockname"
  * - Official blocks: "vaste:stone", "vaste:dirt", etc.
@@ -94,8 +100,14 @@ const BLOCK_REGISTRY = loadBlockpacks();
 /**
  * BlockMappingManager - Server-side mapping manager
  * 
- * Handles runtime numeric ID assignment and client synchronization.
+ * Handles TEMPORARY runtime numeric ID assignment and client synchronization.
  * Numeric IDs are ONLY used for network efficiency (2 bytes vs variable-length strings).
+ * 
+ * CRITICAL: 
+ * - Numeric IDs are regenerated at EVERY server start
+ * - Numeric IDs are NEVER saved to disk
+ * - Different server sessions may assign different numeric IDs to the same block
+ * - This is intentional to handle blockpack changes gracefully
  */
 class BlockMappingManager {
   constructor() {
@@ -113,13 +125,14 @@ class BlockMappingManager {
       }
     }
 
-    log(`Initialized with ${BLOCK_REGISTRY.size} official blocks`);
+    log(`Initialized BlockMappingManager with ${BLOCK_REGISTRY.size} blocks`);
+    log(`IMPORTANT: Numeric IDs are temporary and will change on server restart`, "WARN");
   }
 
   /**
-   * Register a block and assign it a numeric ID
+   * Register a block and assign it a TEMPORARY numeric ID
    * @param {string} stringId String ID (e.g., "vaste:stone", "mymod:ruby")
-   * @param {number} [forcedNumericId] Optional: force a specific numeric ID (for world loading)
+   * @param {number} [forcedNumericId] Optional: force a specific numeric ID (internal use only)
    * @returns {number} The assigned numeric ID
    */
   registerBlock(stringId, forcedNumericId) {
@@ -145,19 +158,21 @@ class BlockMappingManager {
   }
 
   /**
-   * Get numeric ID from string ID
+   * Get TEMPORARY numeric ID from string ID
+   * Returns 0 (air) if block doesn't exist in current blockpacks
    */
   getNumericId(stringId) {
     const numericId = this.stringToNumeric.get(stringId);
     if (numericId === undefined) {
       warn(`[BlockMapping] Unknown string ID: ${stringId}, returning 0 (air)`);
-      return 0; // Fallback to air
+      return 0; // Fallback to air (missing block)
     }
     return numericId;
   }
 
   /**
-   * Get string ID from numeric ID
+   * Get string ID from TEMPORARY numeric ID
+   * Returns "vaste:air" if numeric ID is not mapped
    */
   getStringId(numericId) {
     const stringId = this.numericToString.get(numericId);
@@ -169,7 +184,8 @@ class BlockMappingManager {
   }
 
   /**
-   * Export current mapping table (for client sync)
+   * Export current TEMPORARY mapping table (for client sync)
+   * This mapping is valid only for the current server session
    */
   exportMappingTable() {
     return Array.from(this.stringToNumeric.entries()).map(([stringId, numericId]) => ({

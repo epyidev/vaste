@@ -129,11 +129,9 @@ class WorldStorage {
         const metadataPath = path.join(this.worldPath, 'world.json');
         
         try {
-            // Add block mapping table to metadata
-            const { blockMapping } = require('../BlockRegistry');
+            // Do NOT save block mappings - they are regenerated at each server start
             const enrichedMetadata = {
                 ...metadata,
-                blockMappings: blockMapping.exportMappingTable(), // Save string<->numeric mapping
                 savedAt: new Date().toISOString()
             };
             
@@ -158,20 +156,9 @@ class WorldStorage {
             const data = fs.readFileSync(metadataPath, 'utf8');
             const metadata = JSON.parse(data);
             
-            // Restore block mapping table if present
-            if (metadata.blockMappings && Array.isArray(metadata.blockMappings)) {
-                const { blockMapping } = require('../BlockRegistry');
-                
-                // Clear current mappings and reload from save file
-                blockMapping.stringToNumeric.clear();
-                blockMapping.numericToString.clear();
-                blockMapping.nextNumericId = 1;
-                
-                // Re-register blocks with their saved numeric IDs
-                for (const { stringId, numericId } of metadata.blockMappings) {
-                    blockMapping.registerBlock(stringId, numericId);
-                }
-            }
+            // Block mappings are NOT loaded from file anymore
+            // They are generated dynamically at server start from available blockpacks
+            // This ensures worlds are independent of blockpack changes
             
             return metadata;
         } catch (error) {

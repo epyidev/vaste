@@ -122,9 +122,12 @@ class Region {
     }
 
     /**
-     * Serialize region to buffer
+     * Serialize region to buffer for STORAGE
      * Format: [chunkCount:uint32][chunk1][chunk2]...
-     * Each chunk: [localX:uint8][localY:uint8][localZ:uint8][chunkData]
+     * Each chunk: [localX:uint8][localY:uint8][localZ:uint8][chunkDataSize:uint32][chunkData]
+     * 
+     * Note: Chunk data uses STRING IDs (variable size due to JSON format)
+     * 
      * @returns {Buffer}
      */
     serialize() {
@@ -143,22 +146,26 @@ class Region {
             const localCy = chunk.cy - (this.ry * REGION_SIZE);
             const localCz = chunk.cz - (this.rz * REGION_SIZE);
             
-            // Chunk header: local coords (3 bytes)
-            const chunkHeader = Buffer.allocUnsafe(3);
+            // Serialize chunk data (uses string IDs)
+            const chunkData = chunk.serialize();
+            
+            // Chunk header: local coords (3 bytes) + data size (4 bytes)
+            const chunkHeader = Buffer.allocUnsafe(7);
             chunkHeader.writeUInt8(localCx, 0);
             chunkHeader.writeUInt8(localCy, 1);
             chunkHeader.writeUInt8(localCz, 2);
+            chunkHeader.writeUInt32LE(chunkData.length, 3);
             buffers.push(chunkHeader);
             
             // Chunk data
-            buffers.push(chunk.serialize());
+            buffers.push(chunkData);
         }
         
         return Buffer.concat(buffers);
     }
 
     /**
-     * Deserialize region from buffer
+     * Deserialize region from buffer for STORAGE
      * @param {Buffer} buffer - Serialized region data
      * @param {number} rx - Region X
      * @param {number} ry - Region Y
@@ -172,14 +179,13 @@ class Region {
         const chunkCount = buffer.readUInt32LE(offset);
         offset += 4;
         
-        const CHUNK_DATA_SIZE = 8 + (4096 * 2); // version + nonEmptyCount + blocks
-        
         for (let i = 0; i < chunkCount; i++) {
             // Read local coordinates
             const localCx = buffer.readUInt8(offset);
             const localCy = buffer.readUInt8(offset + 1);
             const localCz = buffer.readUInt8(offset + 2);
-            offset += 3;
+            const chunkDataSize = buffer.readUInt32LE(offset + 3);
+            offset += 7;
             
             // Calculate global coordinates
             const globalCx = rx * REGION_SIZE + localCx;
@@ -187,11 +193,11 @@ class Region {
             const globalCz = rz * REGION_SIZE + localCz;
             
             // Read chunk data
-            const chunkBuffer = buffer.slice(offset, offset + CHUNK_DATA_SIZE);
+            const chunkBuffer = buffer.slice(offset, offset + chunkDataSize);
             const chunk = Chunk.deserialize(chunkBuffer, globalCx, globalCy, globalCz);
             
             region.setChunk(localCx, localCy, localCz, chunk);
-            offset += CHUNK_DATA_SIZE;
+            offset += chunkDataSize;
         }
         
         region.dirty = false;

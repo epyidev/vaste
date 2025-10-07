@@ -6,33 +6,7 @@
     "y": 44,
     "z": 0
   },
-  "created": 1759846056668,
-  "lastAccessed": 1759848474718,
-  "blockMappings": [
-    {
-      "stringId": "vaste:air",
-      "numericId": 0
-    },
-    {
-      "stringId": "vaste:dirt",
-      "numericId": 1
-    },
-    {
-      "stringId": "vaste:grass",
-      "numericId": 2
-    },
-    {
-      "stringId": "vaste:sand",
-      "numericId": 3
-    },
-    {
-      "stringId": "vaste:stone",
-      "numericId": 4
-    },
-    {
-      "stringId": "vaste:wood",
-      "numericId": 5
-    }
-  ],
-  "savedAt": "2025-10-07T14:47:54.719Z"
+  "created": 1759850660691,
+  "lastAccessed": 1759850866666,
+  "savedAt": "2025-10-07T15:27:46.666Z"
 }

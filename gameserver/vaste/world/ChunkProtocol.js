@@ -39,7 +39,7 @@ class ChunkProtocol {
 
     /**
      * Serialize a chunk for network transmission
-     * Binary format:
+     * Binary format (uses NUMERIC IDs for efficiency):
      * - messageType: uint8 (1 byte) = 2 (CHUNK_DATA)
      * - cx: int32 (4 bytes)
      * - cy: int32 (4 bytes)
@@ -47,6 +47,8 @@ class ChunkProtocol {
      * - version: uint32 (4 bytes)
      * - blocks: uint16[4096] (8192 bytes)
      * Total: 8205 bytes per chunk
+     * 
+     * Note: Uses numeric IDs which are temporary and regenerated at each server start
      * 
      * @param {Chunk} chunk - Chunk to serialize
      * @returns {Buffer}
@@ -71,7 +73,7 @@ class ChunkProtocol {
         buffer.writeUInt32LE(chunk.version, offset);
         offset += 4;
         
-        // Block data
+        // Block data (numeric IDs)
         for (let i = 0; i < VOXELS_PER_CHUNK; i++) {
             buffer.writeUInt16LE(chunk.blocks[i], offset);
             offset += 2;
@@ -82,6 +84,8 @@ class ChunkProtocol {
 
     /**
      * Deserialize a chunk from network data
+     * Receives data with NUMERIC IDs (temporary, session-specific)
+     * 
      * @param {Buffer} buffer - Binary chunk data
      * @returns {Object} Chunk data {cx, cy, cz, version, blocks}
      */
@@ -108,7 +112,7 @@ class ChunkProtocol {
         const version = buffer.readUInt32LE(offset);
         offset += 4;
         
-        // Read block data
+        // Read block data (numeric IDs - temporary for this session)
         const blocks = new Uint16Array(VOXELS_PER_CHUNK);
         for (let i = 0; i < VOXELS_PER_CHUNK; i++) {
             blocks[i] = buffer.readUInt16LE(offset);
@@ -120,18 +124,18 @@ class ChunkProtocol {
 
     /**
      * Create a single block update message
-     * Binary format:
+     * Binary format (uses NUMERIC IDs):
      * - messageType: uint8 (1 byte) = 3 (CHUNK_UPDATE)
      * - x: int32 (4 bytes)
      * - y: int32 (4 bytes)
      * - z: int32 (4 bytes)
-     * - blockType: uint16 (2 bytes)
+     * - blockType: uint16 (2 bytes) - NUMERIC ID (temporary)
      * Total: 15 bytes
      * 
      * @param {number} x - World X
      * @param {number} y - World Y
      * @param {number} z - World Z
-     * @param {number} blockType - Block type ID
+     * @param {number} blockType - Block type NUMERIC ID (temporary)
      * @returns {Buffer}
      */
     static serializeBlockUpdate(x, y, z, blockType) {
@@ -155,6 +159,8 @@ class ChunkProtocol {
 
     /**
      * Deserialize a block update message
+     * Receives NUMERIC ID (temporary, session-specific)
+     * 
      * @param {Buffer} buffer - Binary update data
      * @returns {Object} {x, y, z, blockType}
      */
