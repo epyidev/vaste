@@ -85,6 +85,7 @@ export class NetworkManager {
   ) => void;
   private onLoadingStep?: (name: string, status: LoadingStep['status'], detail?: string) => void;
   private onBlockpacksReady?: () => void;
+  private onChatMessage?: (username: string, message: string) => void;
   
   private authenticatedUser: any = null;
 
@@ -94,7 +95,8 @@ export class NetworkManager {
     user?: any,
     onLoadingStep?: (name: string, status: LoadingStep['status'], detail?: string) => void,
     onBlockpacksReady?: () => void,
-    onDisconnect?: (reason?: string) => void
+    onDisconnect?: (reason?: string) => void,
+    onChatMessage?: (username: string, message: string) => void
   ) {
     this.gameState = {
       playerId: null,
@@ -112,6 +114,7 @@ export class NetworkManager {
     this.onLoadingStep = onLoadingStep;
     this.onBlockpacksReady = onBlockpacksReady;
     this.onDisconnect = onDisconnect;
+    this.onChatMessage = onChatMessage;
   }
 
   setAuthenticatedUser(user: any) {
@@ -449,6 +452,10 @@ export class NetworkManager {
         this.handlePlayerMove(message);
         break;
 
+      case "chat_message":
+        this.handleChatMessage(message);
+        break;
+
       case "error":
         this.handleError(message);
         break;
@@ -593,6 +600,16 @@ export class NetworkManager {
   }
 
   /**
+   * Handle chat message
+   */
+  private handleChatMessage(message: any) {
+    logger.info(`[Network] Chat message from ${message.username}: ${message.message}`);
+    if (this.onChatMessage) {
+      this.onChatMessage(message.username, message.message);
+    }
+  }
+
+  /**
    * Handle error
    */
   private handleError(message: any) {
@@ -629,6 +646,16 @@ export class NetworkManager {
       x,
       y,
       z,
+    });
+  }
+
+  /**
+   * Send chat message
+   */
+  sendChatMessage(message: string) {
+    this.sendMessage({
+      type: "chat_message",
+      message,
     });
   }
 

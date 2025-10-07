@@ -10,9 +10,15 @@ interface BlockSelectorProps {
   networkManager: NetworkManager | null;
   physicsPositionRef: React.MutableRefObject<THREE.Vector3>;
   isMenuOpen: boolean;
+  isChatOpen?: boolean;
 }
 
-export const BlockSelector: React.FC<BlockSelectorProps> = ({ networkManager, physicsPositionRef, isMenuOpen }) => {
+export const BlockSelector: React.FC<BlockSelectorProps> = ({ 
+  networkManager, 
+  physicsPositionRef, 
+  isMenuOpen,
+  isChatOpen = false
+}) => {
   const { camera, scene } = useThree();
   const raycaster = useRef(new THREE.Raycaster());
   const [targetBlock, setTargetBlock] = useState<[number, number, number] | null>(null);
@@ -109,22 +115,17 @@ export const BlockSelector: React.FC<BlockSelectorProps> = ({ networkManager, ph
   });
 
   useEffect(() => {
-    const REPEAT_DELAY = 200; // Milliseconds between repeated actions when holding mouse
+    const REPEAT_DELAY = 200;
     
     const handleMouseDown = (e: MouseEvent) => {
-      // Don't allow block actions when menu is open
-      if (isMenuOpen || !targetBlock) return;
+      if (isMenuOpen || isChatOpen || !targetBlock) return;
 
-      // Track which button was pressed
       mouseDownRef.current = { button: e.button, timestamp: Date.now() };
       
-      // Immediate action on first click
       if (e.button === 0) {
-        // Left click - break block
         breakBlock(targetBlock);
         lastActionTimeRef.current = Date.now();
       } else if (e.button === 2 && adjacentPosition) {
-        // Right click - place block
         e.preventDefault();
         
         if (!wouldCollideWithPlayer(adjacentPosition)) {
@@ -135,7 +136,6 @@ export const BlockSelector: React.FC<BlockSelectorProps> = ({ networkManager, ph
     };
 
     const handleMouseUp = (e: MouseEvent) => {
-      // Clear mouse down state when button released
       if (mouseDownRef.current && mouseDownRef.current.button === e.button) {
         mouseDownRef.current = null;
       }
@@ -145,25 +145,22 @@ export const BlockSelector: React.FC<BlockSelectorProps> = ({ networkManager, ph
       e.preventDefault();
     };
 
-    // Continuous action when holding mouse button
     const intervalId = setInterval(() => {
-      if (!mouseDownRef.current || isMenuOpen || !targetBlock) return;
+      if (!mouseDownRef.current || isMenuOpen || isChatOpen || !targetBlock) return;
       
       const now = Date.now();
       if (now - lastActionTimeRef.current < REPEAT_DELAY) return;
 
       if (mouseDownRef.current.button === 0) {
-        // Holding left click - break block
         breakBlock(targetBlock);
         lastActionTimeRef.current = now;
       } else if (mouseDownRef.current.button === 2 && adjacentPosition) {
-        // Holding right click - place block
         if (!wouldCollideWithPlayer(adjacentPosition)) {
           placeBlock(adjacentPosition);
           lastActionTimeRef.current = now;
         }
       }
-    }, 50); // Check every 50ms for smooth continuous placement
+    }, 50);
 
     window.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mouseup', handleMouseUp);
@@ -175,7 +172,7 @@ export const BlockSelector: React.FC<BlockSelectorProps> = ({ networkManager, ph
       window.removeEventListener('contextmenu', handleContextMenu);
       clearInterval(intervalId);
     };
-  }, [targetBlock, adjacentPosition, breakBlock, placeBlock, isMenuOpen, wouldCollideWithPlayer]);
+  }, [targetBlock, adjacentPosition, breakBlock, placeBlock, isMenuOpen, isChatOpen, wouldCollideWithPlayer]);
 
   return targetBlock ? <BlockOutline position={targetBlock} /> : null;
 };

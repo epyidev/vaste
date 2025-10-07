@@ -16,6 +16,7 @@ interface PlayerControllerProps {
   physicsPositionRef?: React.MutableRefObject<THREE.Vector3>;
   renderDistance?: number;
   chunks: Map<string, any>;
+  isChatOpen?: boolean;
 }
 
 const CHUNK_SIZE = 16;
@@ -28,7 +29,8 @@ export function PlayerController({
   onMovementStateChange,
   physicsPositionRef,
   renderDistance = 4,
-  chunks
+  chunks,
+  isChatOpen = false
 }: PlayerControllerProps) {
   const position = useRef(new THREE.Vector3(
     spawnPoint.x,
@@ -119,6 +121,8 @@ export function PlayerController({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isChatOpen) return;
+      
       keys.current[e.code] = true;
       if (e.code === "Space") {
         e.preventDefault();
@@ -126,6 +130,8 @@ export function PlayerController({
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
+      if (isChatOpen) return;
+      
       keys.current[e.code] = false;
     };
 
@@ -136,7 +142,7 @@ export function PlayerController({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, []);
+  }, [isChatOpen]);
 
   useFrame((state, delta) => {
     if (!controlsRef.current) return;
@@ -146,13 +152,14 @@ export function PlayerController({
 
     const dt = Math.min(delta, 0.1);
 
-    const forward = keys.current.KeyW || keys.current.ArrowUp;
-    const backward = keys.current.KeyS || keys.current.ArrowDown;
-    const left = keys.current.KeyA || keys.current.ArrowLeft;
-    const right = keys.current.KeyD || keys.current.ArrowRight;
-    const jump = keys.current.Space;
-    const sneak = keys.current.ShiftLeft || keys.current.ShiftRight;
-    const sprint = keys.current.ControlLeft || keys.current.ControlRight;
+    // Disable movement when chat is open
+    const forward = !isChatOpen && (keys.current.KeyW || keys.current.ArrowUp);
+    const backward = !isChatOpen && (keys.current.KeyS || keys.current.ArrowDown);
+    const left = !isChatOpen && (keys.current.KeyA || keys.current.ArrowLeft);
+    const right = !isChatOpen && (keys.current.KeyD || keys.current.ArrowRight);
+    const jump = !isChatOpen && keys.current.Space;
+    const sneak = !isChatOpen && (keys.current.ShiftLeft || keys.current.ShiftRight);
+    const sprint = !isChatOpen && (keys.current.ControlLeft || keys.current.ControlRight);
 
     // Détecter les transitions sol/air
     const justLanded = onGround.current && !wasOnGround.current;

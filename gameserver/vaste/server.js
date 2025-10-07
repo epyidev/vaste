@@ -904,7 +904,8 @@ class GameServer {
     const isHighPriority = 
       message.type === "block_place" || 
       message.type === "block_break" ||
-      message.type === "player_move";
+      message.type === "player_move" ||
+      message.type === "chat_message";
 
     if (isHighPriority) {
       // Process high priority messages immediately, bypassing queue
@@ -971,6 +972,10 @@ class GameServer {
         this.handleChunkRequest(playerId, message);
         break;
 
+      case "chat_message":
+        this.handleChatMessage(playerId, message);
+        break;
+
       default:
         log(`Unknown message type from ${player.username}: ${message.type}`, "WARN");
     }
@@ -1015,6 +1020,27 @@ class GameServer {
 
     // Send new chunks if needed (basic implementation)
     // TODO: More sophisticated chunk streaming
+  }
+
+  handleChatMessage(playerId, message) {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    const chatMessage = message.message;
+    if (!chatMessage || typeof chatMessage !== 'string') return;
+
+    // Sanitize and trim message
+    const sanitized = chatMessage.trim().substring(0, 256);
+    if (!sanitized) return;
+
+    log(`[Chat] ${player.username}: ${sanitized}`, "INFO");
+
+    // Broadcast to all players including sender
+    this.broadcastToAll({
+      type: "chat_message",
+      username: player.username,
+      message: sanitized,
+    });
   }
 
   handleBlockUpdate(playerId, message) {
@@ -1207,6 +1233,22 @@ class GameServer {
     this.players.forEach((player, id) => {
       if (id === excludePlayerId) return;
       
+      try {
+        if (typeof message === 'string') {
+          player.ws.send(message);
+        } else if (Buffer.isBuffer(message) || message instanceof ArrayBuffer) {
+          player.ws.send(message);
+        } else {
+          player.ws.send(JSON.stringify(message));
+        }
+      } catch (error) {
+        log(`Error broadcasting to player ${id}: ${error.message}`, "ERROR");
+      }
+    });
+  }
+
+  broadcastToAll(message) {
+    this.players.forEach((player, id) => {
       try {
         if (typeof message === 'string') {
           player.ws.send(message);

@@ -41,7 +41,7 @@ import { RawPointerLockControls } from "./components/RawPointerLockControls";
 import { ViewBobbingManager } from "./components/ViewBobbingManager";
 import { OtherPlayers } from "./components/OtherPlayers";
 import LoadingScreen from "./components/ui/LoadingScreen";
-import { LoadingStep } from "./components/ui";
+import { LoadingStep, Chat, ChatMessage } from "./components/ui";
 import { PauseMenu } from "./components/ui/PauseMenu";
 import { SettingsMenu } from "./components/ui/SettingsMenu";
 import { DisconnectedScreen } from "./components/ui/DisconnectedScreen";
@@ -119,14 +119,20 @@ export function Game({ serverUrl, user }: GameProps) {
   // View bobbing rotation offsets (managed by ViewBobbingManager, applied by RawPointerLockControls)
   const [viewBobbingOffsets, setViewBobbingOffsets] = useState({ pitch: 0, yaw: 0, roll: 0 });
   
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const isChatOpenRef = useRef(false);
+  
   const networkRef = useRef<NetworkManager | null>(null);
   const controlsRef = useRef<any>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const fpsCounterRef = useRef({ frames: 0, lastTime: performance.now() });
   const initialChunksLoadedRef = useRef(false);
-  const justUnlockedRef = useRef(false); // Track if we just unlocked (transition period)
-  const canRelockRef = useRef(true); // Allow relocking only when safe
-  const closingMenuRef = useRef(false); // Track if we're closing the menu (shared between effects)
+  const justUnlockedRef = useRef(false);
+  const canRelockRef = useRef(true);
+  const closingMenuRef = useRef(false);
+  const closingChatRef = useRef(false);
 
   // Shadow settings - Optimized for sharp voxel shadows
   const shadowSettings = shadowsEnabled 
@@ -227,6 +233,16 @@ export function Game({ serverUrl, user }: GameProps) {
         // Handle disconnect with reason
         console.log('[Game] Disconnected:', reason);
         setDisconnectReason(reason || 'Disconnected from server');
+      },
+      (username, message) => {
+        // Handle incoming chat message
+        const newMessage: ChatMessage = {
+          id: `${Date.now()}-${Math.random()}`,
+          username,
+          message,
+          timestamp: Date.now(),
+        };
+        setChatMessages(prev => [...prev, newMessage]);
       }
     );
     network.setOnWorldAssigned((spawn, serverSettings) => {
@@ -374,6 +390,8 @@ export function Game({ serverUrl, user }: GameProps) {
         previousLockState,
         isPaused,
         isSettingsOpen,
+        isChatOpen: isChatOpenRef.current,
+        closingChat: closingChatRef.current,
         loadingState,
         justUnlocked: justUnlockedRef.current,
         canRelock: canRelockRef.current,
@@ -382,7 +400,8 @@ export function Game({ serverUrl, user }: GameProps) {
       setIsPointerLocked(locked);
 
       // When unlocking during gameplay (not already in menu), open pause menu
-      if (!locked && previousLockState && loadingState === 'ready' && !isPaused && !isSettingsOpen) {
+      // BUT: ignore if we're closing chat (closingChatRef)
+      if (!locked && previousLockState && loadingState === 'ready' && !isPaused && !isSettingsOpen && !isChatOpenRef.current && !closingChatRef.current) {
         // Only open menu if we're not in the "just unlocked" transition
         if (!justUnlockedRef.current) {
           console.log('[PointerLock] Unlocked during gameplay, opening pause menu');
@@ -535,8 +554,14 @@ export function Game({ serverUrl, user }: GameProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Handle ESC key
       if (e.key === 'Escape') {
-        console.log('[ESC keydown] State:', { loadingState, isPaused, isSettingsOpen, isPointerLocked });
+        console.log('[ESC keydown] State:', { loadingState, isPaused, isSettingsOpen, isPointerLocked, isChatOpen: isChatOpenRef.current });
         if (loadingState !== 'ready') return;
+
+        // Priority 0: If chat is open, let Chat component handle it
+        if (isChatOpenRef.current) {
+          console.log('[ESC keydown] Chat is open, ignoring in Game.tsx');
+          return;
+        }
 
         // Priority 1: If settings are open, close settings and return to pause menu
         if (isSettingsOpen) {
@@ -557,14 +582,11 @@ export function Game({ serverUrl, user }: GameProps) {
         }
 
         // Priority 3: Playing - let browser unlock pointer naturally
-        // The pointerlockchange event will handle opening the pause menu
         console.log('[ESC keydown] In game, letting browser unlock pointer');
       }
 
       // Block common browser shortcuts when playing
-      // Note: We only preventDefault to block browser actions,
-      // but we DON'T stopPropagation to allow game input handlers to still work
-      if (isPointerLocked) {
+      if (isPointerLocked && !isChatOpenRef.current) {
         // Ctrl/Cmd combinations
         if (e.ctrlKey || e.metaKey) {
           const blockedKeys = ['s', 'w', 'n', 't', 'r', 'f', 'h', 'p', 'o', 'g', 'u', 'j', 'd', 'l'];
@@ -733,6 +755,29 @@ export function Game({ serverUrl, user }: GameProps) {
     navigate('/servers');
   };
 
+  const handleSendChatMessage = useCallback((message: string) => {
+    if (networkRef.current && message.trim()) {
+      networkRef.current.sendChatMessage(message);
+    }
+  }, []);
+
+  const handleChatOpenChange = useCallback((isOpen: boolean) => {
+    if (!isOpen) {
+      closingChatRef.current = true;
+      setTimeout(() => {
+        closingChatRef.current = false;
+      }, 200);
+    }
+    isChatOpenRef.current = isOpen;
+    setIsChatOpen(isOpen);
+  }, []);
+
+  const handleRequestPointerLock = useCallback(() => {
+    if (controlsRef.current && loadingState === 'ready' && !isPaused && !isSettingsOpen) {
+      controlsRef.current.lock();
+    }
+  }, [loadingState, isPaused, isSettingsOpen]);
+
   // Get loading message based on state
   const getLoadingMessage = () => {
     switch (loadingState) {
@@ -819,6 +864,7 @@ export function Game({ serverUrl, user }: GameProps) {
           physicsPositionRef={playerPhysicsPositionRef}
           renderDistance={renderDistance}
           chunks={chunks}
+          isChatOpen={isChatOpen}
         />
         
         {/* View Bobbing Manager - Must be AFTER PlayerController to apply offsets */}
@@ -835,6 +881,7 @@ export function Game({ serverUrl, user }: GameProps) {
           networkManager={networkRef.current} 
           physicsPositionRef={playerPhysicsPositionRef}
           isMenuOpen={isPaused || isSettingsOpen}
+          isChatOpen={isChatOpen}
         />
         
         <Sky
@@ -956,6 +1003,18 @@ export function Game({ serverUrl, user }: GameProps) {
         <DisconnectedScreen
           reason={disconnectReason}
           onReturnToServerList={() => navigate('/servers')}
+        />
+      )}
+
+      {/* Chat */}
+      {loadingState === 'ready' && !disconnectReason && (
+        <Chat
+          messages={chatMessages}
+          currentUsername={user?.username || 'Player'}
+          onSendMessage={handleSendChatMessage}
+          onChatOpenChange={handleChatOpenChange}
+          onRequestPointerLock={handleRequestPointerLock}
+          isInputDisabled={isPaused || isSettingsOpen}
         />
       )}
     </div>
