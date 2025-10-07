@@ -10,25 +10,28 @@ export const PHYSICS_CONFIG = {
   playerEyeHeight: 1.62,
 
   // Movement speeds (blocks per second)
-  walkSpeed: 4.3,       // MAX_WALK_SPEED
-  sprintSpeed: 5.6,     // MAX_RUN_SPEED
-  sneakSpeed: 1.295,
+  walkSpeed: 4.3,
+  sprintSpeed: 5.6,
+  sneakSpeed: 2.295,
 
   // Acceleration (blocks per second²)
-  groundAcceleration: 50.0,  // GROUND_ACCEL - accélération forte au sol
-  airAcceleration: 10.0,      // AIR_ACCEL - contrôle limité en l'air
+  groundAcceleration: 50.0,
+  airAcceleration: 10.0,
 
   // Friction (coefficient par seconde)
-  // Note: sera converti en coefficient par frame dans le controller
-  airFrictionPerSecond: 0.91,  // AIR_FRICTION - friction horizontale en l'air
+  airFrictionPerSecond: 0.91,
 
   // Gravity and jumping (blocks per second)
-  gravity: 32,           // GRAVITY
-  jumpVelocity: 8.4,        // JUMP_VELOCITY
+  gravity: 32,
+  jumpVelocity: 8.4,
 
   // Momentum retention for chained jumps
-  momentumRetain: 0.85,     // MOMENTUM_RETAIN - conservation du momentum entre sauts
+  momentumRetain: 0.85,
+  sneakJumpMomentumRetain: 0.4, // Reduced horizontal momentum when sneaking (jump height stays same)
 
   // Step height (auto-climb blocks)
   stepHeight: 0.6,
+
+  // Edge detection
+  edgeSlowdownFactor: 0.5, // Speed multiplier when at edge while sneaking
 };

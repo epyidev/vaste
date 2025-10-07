@@ -134,7 +134,8 @@ export function PlayerController({
     const left = keys.current.KeyA || keys.current.ArrowLeft;
     const right = keys.current.KeyD || keys.current.ArrowRight;
     const jump = keys.current.Space;
-    const sprint = keys.current.ShiftLeft || keys.current.ShiftRight;
+    const sneak = keys.current.ShiftLeft || keys.current.ShiftRight;
+    const sprint = keys.current.ControlLeft || keys.current.ControlRight;
 
     // Détecter les transitions sol/air
     const justLanded = onGround.current && !wasOnGround.current;
@@ -142,7 +143,33 @@ export function PlayerController({
     wasOnGround.current = onGround.current;
 
     // Déterminer la vitesse cible selon le mode
-    const speedTarget = sprint && forward ? PHYSICS_CONFIG.sprintSpeed : PHYSICS_CONFIG.walkSpeed;
+    // Note: Speed limits only apply when on ground. In air, momentum is preserved.
+    let speedTarget = PHYSICS_CONFIG.walkSpeed;
+    if (sneak && onGround.current) {
+      speedTarget = PHYSICS_CONFIG.sneakSpeed;
+    } else if (sprint && forward) {
+      speedTarget = PHYSICS_CONFIG.sprintSpeed;
+    }
+
+    // Smooth edge slowdown when sneaking
+    // Calculate proximity to edge and apply smooth speed reduction
+    let edgeSlowdownMultiplier = 1.0;
+    if (sneak && onGround.current && chunks.size > 0) {
+      const playerFeetY = position.current.y - PHYSICS_CONFIG.playerEyeHeight;
+      const edgeProximity = VoxelPhysics.getEdgeProximity(
+        chunks,
+        new THREE.Vector3(position.current.x, playerFeetY, position.current.z),
+        PHYSICS_CONFIG.playerWidth
+      );
+      
+      // Apply smooth interpolation: closer to edge = slower
+      // edgeProximity: 0 (safe) -> 1 (very close to falling)
+      // Smoothly interpolate between 1.0 (full speed) and edgeSlowdownFactor (slow)
+      if (edgeProximity > 0.3) { // Start slowing when 30% unsupported
+        const slowdownAmount = (edgeProximity - 0.3) / 0.7; // 0 to 1 range
+        edgeSlowdownMultiplier = 1.0 - (slowdownAmount * (1.0 - PHYSICS_CONFIG.edgeSlowdownFactor));
+      }
+    }
 
     // Construire la direction d'entrée (normalisée)
     const inputX = (right ? 1 : 0) - (left ? 1 : 0);
@@ -189,14 +216,17 @@ export function PlayerController({
       velocity.current.z += inputDirection.z * accel * dt;
     }
 
-    // Clamp de la vitesse horizontale selon le mode
+    // Clamp de la vitesse horizontale selon le mode et edge proximity
     const horizontalSpeed = Math.sqrt(
       velocity.current.x * velocity.current.x + 
       velocity.current.z * velocity.current.z
     );
     
-    if (horizontalSpeed > speedTarget) {
-      const scale = speedTarget / horizontalSpeed;
+    // Apply edge slowdown to speed target
+    const effectiveSpeedTarget = speedTarget * edgeSlowdownMultiplier;
+    
+    if (horizontalSpeed > effectiveSpeedTarget) {
+      const scale = effectiveSpeedTarget / horizontalSpeed;
       velocity.current.x *= scale;
       velocity.current.z *= scale;
     }
@@ -239,12 +269,19 @@ export function PlayerController({
     // ========================================
     
     if (jump && onGround.current) {
-      // Impulsion verticale
+      // Always jump at same height
       velocity.current.y = PHYSICS_CONFIG.jumpVelocity;
       
-      // Conservation du momentum horizontal (MOMENTUM_RETAIN)
-      velocity.current.x *= PHYSICS_CONFIG.momentumRetain;
-      velocity.current.z *= PHYSICS_CONFIG.momentumRetain;
+      // Different horizontal momentum retention based on sneak state
+      if (sneak) {
+        // Reduced horizontal momentum when sneaking (shorter jump distance)
+        velocity.current.x *= PHYSICS_CONFIG.sneakJumpMomentumRetain;
+        velocity.current.z *= PHYSICS_CONFIG.sneakJumpMomentumRetain;
+      } else {
+        // Normal momentum retention
+        velocity.current.x *= PHYSICS_CONFIG.momentumRetain;
+        velocity.current.z *= PHYSICS_CONFIG.momentumRetain;
+      }
       
       onGround.current = false;
     }
@@ -269,11 +306,65 @@ export function PlayerController({
         onGround.current = false;
       }
     } else {
+      // ========================================
+      // SNEAK EDGE DETECTION
+      // ========================================
+      // When sneaking, prevent falling off block edges by checking each axis independently.
+      // This allows walking along edges (perpendicular movement) while preventing falls.
+      // Only applies when:
+      // - Sneak is active
+      // - Player is on the ground
+      // - Player is not moving upward (allows normal jumping while sneaking)
+      
+      let finalMoveDelta = moveDelta.clone();
+      
+      if (sneak && onGround.current && velocity.current.y <= 0) {
+        const currentFeetPos = new THREE.Vector3(
+          position.current.x,
+          playerFeetY,
+          position.current.z
+        );
+        
+        // Check X axis movement independently
+        // If moving in X would cause falling, block ONLY X movement (Z is still free)
+        if (finalMoveDelta.x !== 0) {
+          const wouldFallX = VoxelPhysics.wouldFallOffEdgeX(
+            chunks,
+            currentFeetPos,
+            finalMoveDelta.x,
+            PHYSICS_CONFIG.playerWidth,
+            PHYSICS_CONFIG.playerHeight
+          );
+          
+          if (wouldFallX) {
+            finalMoveDelta.x = 0;
+            velocity.current.x = 0;
+          }
+        }
+        
+        // Check Z axis movement independently
+        // If moving in Z would cause falling, block ONLY Z movement (X is still free)
+        if (finalMoveDelta.z !== 0) {
+          const wouldFallZ = VoxelPhysics.wouldFallOffEdgeZ(
+            chunks,
+            currentFeetPos,
+            finalMoveDelta.z,
+            PHYSICS_CONFIG.playerWidth,
+            PHYSICS_CONFIG.playerHeight
+          );
+          
+          if (wouldFallZ) {
+            finalMoveDelta.z = 0;
+            velocity.current.z = 0;
+          }
+        }
+      }
+
       // Détection de collision avec le monde voxel
       const result = VoxelPhysics.sweepAABB(
         chunks,
         new THREE.Vector3(position.current.x, playerFeetY, position.current.z),
-        moveDelta,
+        finalMoveDelta,
         PHYSICS_CONFIG.playerWidth,
         PHYSICS_CONFIG.playerHeight
       );
@@ -288,19 +379,25 @@ export function PlayerController({
       onGround.current = result.onGround;
       currentGroundBlockId.current = result.groundBlockId;
       
-      // Gérer la vélocité après collision
-      const expectedDelta = moveDelta.clone();
-      
-      if (Math.abs(result.velocity.x - expectedDelta.x) > 0.001) {
-        velocity.current.x = 0;
+      // Smooth velocity handling after collision to prevent stutter
+      // Only zero velocity if there was significant collision resistance
+      if (result.velocity.x !== finalMoveDelta.x) {
+        velocity.current.x = result.velocity.x;
       }
       
-      if (Math.abs(result.velocity.z - expectedDelta.z) > 0.001) {
-        velocity.current.z = 0;
+      if (result.velocity.z !== finalMoveDelta.z) {
+        velocity.current.z = result.velocity.z;
       }
       
-      if (Math.abs(result.velocity.y - expectedDelta.y) > 0.001) {
-        velocity.current.y = 0;
+      if (result.velocity.y !== finalMoveDelta.y) {
+        // For Y axis, handle landing smoothly
+        if (result.onGround && velocity.current.y < 0) {
+          // Just landed - smoothly stop vertical movement
+          velocity.current.y = 0;
+        } else if (velocity.current.y > 0 && result.velocity.y === 0) {
+          // Hit ceiling - zero upward velocity
+          velocity.current.y = 0;
+        }
       }
     }
 

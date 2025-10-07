@@ -192,4 +192,224 @@ export class VoxelPhysics {
 
     return { position: result, onGround, velocity: finalVelocity, groundBlockId };
   }
+
+  /**
+   * Check if movement along X axis would cause player to fall off edge
+   * Returns true if the movement should be blocked to prevent falling
+   * 
+   * This implementation checks if the player's hitbox would have ANY solid ground
+   * support after the movement. It allows the player to get as close to the edge
+   * as physically possible (even 1 pixel of hitbox overlap is enough).
+   * 
+   * @param chunks - World chunk data
+   * @param currentPos - Current player feet position
+   * @param deltaX - Intended X movement this frame
+   * @param width - Player hitbox width
+   * @param height - Player hitbox height
+   * @returns true if movement would cause player to fall off edge
+   */
+  static wouldFallOffEdgeX(
+    chunks: Map<string, any>,
+    currentPos: THREE.Vector3,
+    deltaX: number,
+    width: number,
+    height: number
+  ): boolean {
+    if (deltaX === 0) return false;
+
+    const halfWidth = width / 2;
+    const newX = currentPos.x + deltaX;
+    
+    // Calculate the full range of the player's hitbox after movement
+    const minX = newX - halfWidth;
+    const maxX = newX + halfWidth;
+    const minZ = currentPos.z - halfWidth;
+    const maxZ = currentPos.z + halfWidth;
+    
+    // Get all block positions that could potentially support the player
+    const blockMinX = Math.floor(minX);
+    const blockMaxX = Math.floor(maxX);
+    const blockMinZ = Math.floor(minZ);
+    const blockMaxZ = Math.floor(maxZ);
+    const blockY = Math.floor(currentPos.y - 0.01); // Just below feet
+    
+    // Check if ANY block exists under the player's hitbox area
+    for (let bx = blockMinX; bx <= blockMaxX; bx++) {
+      for (let bz = blockMinZ; bz <= blockMaxZ; bz++) {
+        // Check if this block position intersects with player's hitbox
+        const blockMinBoundX = bx;
+        const blockMaxBoundX = bx + 1;
+        const blockMinBoundZ = bz;
+        const blockMaxBoundZ = bz + 1;
+        
+        // AABB intersection test
+        const intersects = !(
+          maxX <= blockMinBoundX ||
+          minX >= blockMaxBoundX ||
+          maxZ <= blockMinBoundZ ||
+          minZ >= blockMaxBoundZ
+        );
+        
+        if (intersects && this.isBlockSolid(chunks, bx, blockY, bz)) {
+          return false; // Found ground support, safe to move
+        }
+      }
+    }
+    
+    return true; // No ground support found, would fall
+  }
+
+  /**
+   * Check if movement along Z axis would cause player to fall off edge
+   * Returns true if the movement should be blocked to prevent falling
+   * 
+   * This implementation checks if the player's hitbox would have ANY solid ground
+   * support after the movement. It allows the player to get as close to the edge
+   * as physically possible (even 1 pixel of hitbox overlap is enough).
+   * 
+   * @param chunks - World chunk data
+   * @param currentPos - Current player feet position
+   * @param deltaZ - Intended Z movement this frame
+   * @param width - Player hitbox width
+   * @param height - Player hitbox height
+   * @returns true if movement would cause player to fall off edge
+   */
+  static wouldFallOffEdgeZ(
+    chunks: Map<string, any>,
+    currentPos: THREE.Vector3,
+    deltaZ: number,
+    width: number,
+    height: number
+  ): boolean {
+    if (deltaZ === 0) return false;
+
+    const halfWidth = width / 2;
+    const newZ = currentPos.z + deltaZ;
+    
+    // Calculate the full range of the player's hitbox after movement
+    const minX = currentPos.x - halfWidth;
+    const maxX = currentPos.x + halfWidth;
+    const minZ = newZ - halfWidth;
+    const maxZ = newZ + halfWidth;
+    
+    // Get all block positions that could potentially support the player
+    const blockMinX = Math.floor(minX);
+    const blockMaxX = Math.floor(maxX);
+    const blockMinZ = Math.floor(minZ);
+    const blockMaxZ = Math.floor(maxZ);
+    const blockY = Math.floor(currentPos.y - 0.01); // Just below feet
+    
+    // Check if ANY block exists under the player's hitbox area
+    for (let bx = blockMinX; bx <= blockMaxX; bx++) {
+      for (let bz = blockMinZ; bz <= blockMaxZ; bz++) {
+        // Check if this block position intersects with player's hitbox
+        const blockMinBoundX = bx;
+        const blockMaxBoundX = bx + 1;
+        const blockMinBoundZ = bz;
+        const blockMaxBoundZ = bz + 1;
+        
+        
+        // AABB intersection test
+        const intersects = !(
+          maxX <= blockMinBoundX ||
+          minX >= blockMaxBoundX ||
+          maxZ <= blockMinBoundZ ||
+          minZ >= blockMaxBoundZ
+        );
+        
+        if (intersects && this.isBlockSolid(chunks, bx, blockY, bz)) {
+          return false; // Found ground support, safe to move
+        }
+      }
+    }
+    
+    return true; // No ground support found, would fall
+  }
+
+  /**
+   * Calculate how close the player is to falling off an edge
+   * Returns a value between 0 and 1:
+   * - 0: Fully supported (center of block)
+   * - 1: At the very edge, about to fall
+   * 
+   * This is used for smooth speed reduction when sneaking at edges.
+   * 
+   * @param chunks - World chunk data
+   * @param position - Current player feet position
+   * @param width - Player hitbox width
+   * @returns Edge proximity factor (0 = safe, 1 = very close to edge)
+   */
+  static getEdgeProximity(
+    chunks: Map<string, any>,
+    position: THREE.Vector3,
+    width: number
+  ): number {
+    const halfWidth = width / 2;
+    
+    // Calculate player's hitbox bounds
+    const minX = position.x - halfWidth;
+    const maxX = position.x + halfWidth;
+    const minZ = position.z - halfWidth;
+    const maxZ = position.z + halfWidth;
+    
+    // Get all block positions under the player
+    const blockMinX = Math.floor(minX);
+    const blockMaxX = Math.floor(maxX);
+    const blockMinZ = Math.floor(minZ);
+    const blockMaxZ = Math.floor(maxZ);
+    const blockY = Math.floor(position.y - 0.01);
+    
+    // Calculate total hitbox area
+    const hitboxArea = width * width;
+    
+    // Calculate area of hitbox that has solid ground below
+    let supportedArea = 0;
+    
+    for (let bx = blockMinX; bx <= blockMaxX; bx++) {
+      for (let bz = blockMinZ; bz <= blockMaxZ; bz++) {
+        if (this.isBlockSolid(chunks, bx, blockY, bz)) {
+          // Calculate intersection area between hitbox and this block
+          const blockMinBoundX = bx;
+          const blockMaxBoundX = bx + 1;
+          const blockMinBoundZ = bz;
+          const blockMaxBoundZ = bz + 1;
+          
+          const intersectMinX = Math.max(minX, blockMinBoundX);
+          const intersectMaxX = Math.min(maxX, blockMaxBoundX);
+          const intersectMinZ = Math.max(minZ, blockMinBoundZ);
+          const intersectMaxZ = Math.min(maxZ, blockMaxBoundZ);
+          
+          if (intersectMaxX > intersectMinX && intersectMaxZ > intersectMinZ) {
+            const intersectArea = (intersectMaxX - intersectMinX) * (intersectMaxZ - intersectMinZ);
+            supportedArea += intersectArea;
+          }
+        }
+      }
+    }
+    
+    // Calculate unsupported ratio (0 = fully supported, 1 = no support)
+    const unsupportedRatio = 1 - (supportedArea / hitboxArea);
+    
+    // Clamp between 0 and 1
+    return Math.max(0, Math.min(1, unsupportedRatio));
+  }
+
+  /**
+   * Check if player is currently standing at a block edge
+   * This is used to slow down movement for better control at edges
+   * 
+   * @param chunks - World chunk data
+   * @param position - Current player feet position
+   * @param width - Player hitbox width
+   * @returns true if player is at an edge
+   */
+  static isAtEdge(
+    chunks: Map<string, any>,
+    position: THREE.Vector3,
+    width: number
+  ): boolean {
+    const proximity = this.getEdgeProximity(chunks, position, width);
+    return proximity > 0.1; // At edge if more than 10% unsupported
+  }
 }
+
