@@ -38,7 +38,8 @@ export function PlayerController({
   const velocity = useRef(new THREE.Vector3(0, 0, 0));
   const keys = useRef<Record<string, boolean>>({});
   const onGround = useRef(false);
-  const wasOnGround = useRef(false); // Pour détecter le moment du saut
+  const wasOnGround = useRef(false);
+  const jumpedWhileSprinting = useRef(false); // Track if current jump was a sprint jump
   const currentGroundBlockId = useRef(0);
 
   const lastNetworkUpdate = useRef(0);
@@ -240,8 +241,13 @@ export function PlayerController({
         velocity.current.z *= scale;
       }
     } else {
-      // In air: only clamp if exceeding max possible sprint speed
-      const maxAirSpeed = PHYSICS_CONFIG.sprintSpeed + PHYSICS_CONFIG.sprintJumpBoost;
+      // In air: clamp based on whether this was a sprint jump or normal jump
+      // Sprint jumps can reach sprint speed + boost
+      // Normal jumps are limited to walk speed
+      const maxAirSpeed = jumpedWhileSprinting.current 
+        ? PHYSICS_CONFIG.sprintSpeed + PHYSICS_CONFIG.sprintJumpBoost
+        : PHYSICS_CONFIG.walkSpeed;
+        
       if (horizontalSpeed > maxAirSpeed) {
         const scale = maxAirSpeed / horizontalSpeed;
         velocity.current.x *= scale;
@@ -296,29 +302,39 @@ export function PlayerController({
         velocity.current.z * velocity.current.z
       );
       
+      // Determine if this is a sprint jump
+      const isSprinting = sprint && forward && horizontalSpeed >= PHYSICS_CONFIG.sprintSpeed * 0.95;
+      jumpedWhileSprinting.current = isSprinting;
+      
       // Different horizontal momentum based on movement state
       if (sneak) {
         // Reduced horizontal momentum when sneaking (shorter jump distance)
         velocity.current.x *= PHYSICS_CONFIG.sneakJumpMomentumRetain;
         velocity.current.z *= PHYSICS_CONFIG.sneakJumpMomentumRetain;
-      } else {
-        // Keep full momentum
-        velocity.current.x *= PHYSICS_CONFIG.momentumRetain;
-        velocity.current.z *= PHYSICS_CONFIG.momentumRetain;
+      } else if (isSprinting) {
+        // Sprint jump: only if actually moving at sprint speed (95% threshold for slight variations)
+        velocity.current.x *= PHYSICS_CONFIG.sprintJumpMomentumRetain;
+        velocity.current.z *= PHYSICS_CONFIG.sprintJumpMomentumRetain;
         
-        // Apply sprint jump boost if moving fast enough
-        if (sprint && horizontalSpeed >= PHYSICS_CONFIG.sprintJumpMinSpeed) {
-          // Calculate direction of movement
-          const dirX = velocity.current.x / horizontalSpeed;
-          const dirZ = velocity.current.z / horizontalSpeed;
-          
-          // Add boost in movement direction
-          velocity.current.x += dirX * PHYSICS_CONFIG.sprintJumpBoost;
-          velocity.current.z += dirZ * PHYSICS_CONFIG.sprintJumpBoost;
-        }
+        // Calculate direction of movement
+        const dirX = velocity.current.x / horizontalSpeed;
+        const dirZ = velocity.current.z / horizontalSpeed;
+        
+        // Add boost in movement direction
+        velocity.current.x += dirX * PHYSICS_CONFIG.sprintJumpBoost;
+        velocity.current.z += dirZ * PHYSICS_CONFIG.sprintJumpBoost;
+      } else {
+        // Normal walk jump: reduced momentum (no boost)
+        velocity.current.x *= PHYSICS_CONFIG.normalJumpMomentumRetain;
+        velocity.current.z *= PHYSICS_CONFIG.normalJumpMomentumRetain;
       }
       
       onGround.current = false;
+    }
+    
+    // Reset sprint jump flag when landing
+    if (onGround.current && !wasOnGround.current) {
+      jumpedWhileSprinting.current = false;
     }
 
     // ========================================

@@ -27,10 +27,10 @@ export const PHYSICS_CONFIG = {
   
   // Sprint jump mechanics
   sprintJumpBoost: 0.35, // Adjusted for proper 4-block distance
-  sprintJumpMinSpeed: 5.0, // Minimum horizontal speed to trigger sprint jump boost
 
   // Momentum retention for chained jumps
-  momentumRetain: 1.0, // Keep 100% of horizontal momentum when jumping
+  normalJumpMomentumRetain: 0.85, // Normal walk jumps retain 85% momentum (shorter distance)
+  sprintJumpMomentumRetain: 1.0, // Sprint jumps keep 100% of horizontal momentum
   sneakJumpMomentumRetain: 0.6, // Reduced horizontal momentum when sneaking (jump height stays same)
 
   // Step height (auto-climb blocks)

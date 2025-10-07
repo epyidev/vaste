@@ -87,14 +87,14 @@ export const VIEW_BOBBING_CONFIG = {
 
   // Landing animation
   landing: {
-    // Impact effect when landing
-    impactAmount: 0.06, // Subtle downward camera dip on landing
-    impactDuration: 0.15, // Quick impact animation
-    impactRecovery: 0.2, // Quick recovery
-    dampingFactor: 0.85, // Smooth damping to avoid stutters
-
+    // Impact effect when landing (proportional to fall distance)
+    impactDuration: 0.05, // Very fast downward impact (quasi-instantaneous)
+    impactRecovery: 0.35, // Progressive recovery upward
+    
     // Minimum fall velocity to trigger landing effect (blocks/sec)
-    minVelocity: 8.0, // Only trigger on significant falls
+    minVelocity: 6.0, // Trigger on moderate falls
+    
+    // Maximum impact is capped at 0.5 blocks in code
   },
 
   // Jumping animation
@@ -121,8 +121,8 @@ export const VIEW_BOBBING_CONFIG = {
     maxPitchAngle: 1.7, // Maximum pitch angle cap in degrees
     
     // Left/right roll
-    strafeRollAmount: 2.7, // Degrees to roll when strafing left/right
-    maxRollAngle: 2.7, // Maximum roll angle cap in degrees
+    strafeRollAmount: 2.0, // Degrees to roll when strafing left/right
+    maxRollAngle: 2.0, // Maximum roll angle cap in degrees
     
     // Smoothing
     leanSmoothing: 0.15, // How quickly camera leans into direction (higher = more responsive)

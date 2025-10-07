@@ -22,6 +22,7 @@ export function ViewBobbingManager({
   const bobbingTime = useRef(0);
   const breathingTime = useRef(0);
   const landingTime = useRef(-1);
+  const landingImpactStrength = useRef(0); // Store impact strength based on fall velocity
   const lastVerticalVelocity = useRef(0);
   const lastSneakState = useRef(false);
 
@@ -70,6 +71,19 @@ export function ViewBobbingManager({
 
     if (justLanded && enabled) {
       landingTime.current = 0;
+      
+      // Calculate impact strength based on fall velocity (proportional)
+      const fallSpeed = Math.abs(lastVerticalVelocity.current);
+      // Normalize: minVelocity = 0%, maxFallSpeed = 100%
+      const maxFallSpeed = 30.0; // Maximum expected fall velocity
+      const normalizedFallSpeed = Math.min(
+        (fallSpeed - VIEW_BOBBING_CONFIG.landing.minVelocity) / 
+        (maxFallSpeed - VIEW_BOBBING_CONFIG.landing.minVelocity),
+        1.0
+      );
+      
+      // Store impact strength (0 to 1)
+      landingImpactStrength.current = normalizedFallSpeed;
     }
 
     lastVerticalVelocity.current = playerState.verticalVelocity;
@@ -117,18 +131,38 @@ export function ViewBobbingManager({
 
     breathingTime.current += delta;
 
-    // Landing animation - smooth single-phase impact
+    // Landing animation - proportional impact with instant down, progressive up
     if (landingTime.current >= 0) {
       landingTime.current += delta;
-      const totalDuration = config.landing.impactDuration + config.landing.impactRecovery;
+      const impactPhase = config.landing.impactDuration;
+      const recoveryPhase = config.landing.impactRecovery;
+      const totalDuration = impactPhase + recoveryPhase;
       
       if (landingTime.current < totalDuration) {
-        const progress = landingTime.current / totalDuration;
-        // Smooth curve: quick down, smooth up
-        const curve = Math.sin(progress * Math.PI);
-        verticalTarget -= config.landing.impactAmount * curve * config.landing.dampingFactor;
+        let impactValue = 0;
+        
+        if (landingTime.current < impactPhase) {
+          // Phase 1: Instant impact (très rapide, quasi-instantané)
+          const impactProgress = landingTime.current / impactPhase;
+          // Courbe exponentielle très rapide pour descente quasi-instantanée
+          const impactCurve = 1 - Math.pow(1 - impactProgress, 4);
+          impactValue = impactCurve;
+        } else {
+          // Phase 2: Progressive recovery (redressement progressif)
+          const recoveryProgress = (landingTime.current - impactPhase) / recoveryPhase;
+          // Courbe ease-out pour redressement naturel
+          const recoveryCurve = 1 - Math.pow(recoveryProgress, 2);
+          impactValue = recoveryCurve;
+        }
+        
+        // Apply proportional impact based on fall velocity
+        // Max impact capped at 0.5 blocks (half block)
+        const maxImpact = 0.5;
+        const scaledImpact = maxImpact * landingImpactStrength.current * impactValue;
+        verticalTarget -= scaledImpact;
       } else {
         landingTime.current = -1;
+        landingImpactStrength.current = 0;
       }
     }
 
