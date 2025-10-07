@@ -107,7 +107,7 @@ export const VIEW_BOBBING_CONFIG = {
   idle: {
     // Very subtle breathing animation
     breathingAmount: 0.008, // Tiny vertical movement
-    breathingFrequency: 1.5, // Slow breathing cycle per second
+    breathingFrequency: 0.5, // Slow breathing cycle per second
     enabled: true, // Can be disabled for completely static camera
   },
 
