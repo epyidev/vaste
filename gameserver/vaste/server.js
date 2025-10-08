@@ -11,6 +11,7 @@
  * │ • block_place                │ • chunk_request                 │
  * │ • block_break                │                                 │
  * │ • player_move                │                                 │
+ * │ • chat_message               │                                 │
  * └──────────────────────────────┴─────────────────────────────────┘
  * 
  * Chunk Streaming Pipeline:
@@ -259,11 +260,11 @@ class GameServer {
 
     /**
      * High-Performance Message Priority System
-     * 
+     *
      * Architecture:
-     * - High Priority: block_place, block_break, player_move (immediate processing)
-     * - Low Priority: chunk_request (queued and batched)
-     * 
+     * - High Priority: block_place, block_break, player_move, chat (immediate processing)
+     * - Low Priority: chunk_request (queued via chunk streamer)
+     *
      * Chunk Streaming System:
      * - Batched processing: 8 chunks per batch
      * - Priority-based queue: closer chunks processed first
@@ -271,14 +272,13 @@ class GameServer {
      * - Throughput: ~200 chunks/second per player
      * - Max queue: 200 chunks (prevents memory overflow)
      * - Empty chunk caching: Reduces generation overhead
-     * 
+     *
      * Performance Characteristics:
      * - Block actions: <1ms latency
      * - Chunk streaming: 5ms between batches
      * - Initial load (125 chunks @ 5x5x5): ~625ms
      * - Zero blocking of gameplay actions
      */
-    this.messageQueues = new Map(); // playerId -> { lowPriority: [], processing: false }
     this.chunkStreamers = new Map(); // playerId -> { queue: [], streaming: false, batchSize, batchDelay }
     this.emptyChunkCache = new Map(); // worldId -> empty chunk buffer cache
 
@@ -726,7 +726,6 @@ class GameServer {
     const player = this.players.get(playerId);
     if (!player || !player.world) return;
 
-    const world = player.world;
     const renderDistance = this.renderDistanceChunks;
 
     // Calculate player chunk position
@@ -734,11 +733,11 @@ class GameServer {
     const playerChunkY = Math.floor(player.y / CHUNK_SIZE);
     const playerChunkZ = Math.floor(player.z / CHUNK_SIZE);
 
-    log(`Sending chunks to ${player.username} around chunk (${playerChunkX}, ${playerChunkY}, ${playerChunkZ})`);
+    log(`Queueing chunks for ${player.username} around chunk (${playerChunkX}, ${playerChunkY}, ${playerChunkZ})`);
 
-    let sentCount = 0;
+    let queuedCount = 0;
 
-    // Send chunks in spiral pattern (closest first)
+    // Queue chunks in spiral pattern (closest first) - streamer will handle actual sending
     for (let distance = 0; distance <= renderDistance; distance++) {
       for (let dx = -distance; dx <= distance; dx++) {
         for (let dy = -distance; dy <= distance; dy++) {
@@ -752,30 +751,19 @@ class GameServer {
             const cy = playerChunkY + dy;
             const cz = playerChunkZ + dz;
 
-            const chunkKey = `${cx},${cy},${cz}`;
+            // Calculate priority: closer = higher
+            const distSq = dx * dx + dy * dy + dz * dz;
+            const priority = Math.max(0, 10000 - distSq);
 
-            try {
-              const chunk = world.getOrGenerateChunk(cx, cy, cz);
-              const buffer = ChunkProtocol.serializeChunk(chunk);
-              // Send with logging
-              try {
-                player.ws.__sentCount = (player.ws.__sentCount || 0) + 1;
-                this._packetCounters.totalSent++;
-                const sizeKb = (buffer.length / 1024).toFixed(2);
-                log(`Packet SENT #${player.ws.__sentCount} to ${player.username} size=${sizeKb}KB`, "DEBUG");
-              } catch (e) {}
-              player.ws.send(buffer);
-              player.loadedChunks.add(chunkKey);
-              sentCount++;
-            } catch (error) {
-              log(`Error sending chunk (${cx}, ${cy}, ${cz}) to ${player.username}: ${error.message}`, "ERROR");
+            if (this.queueChunkForStreaming(playerId, cx, cy, cz, priority)) {
+              queuedCount++;
             }
           }
         }
       }
     }
 
-    log(`Sent ${sentCount} chunks to ${player.username}`);
+    log(`Queued ${queuedCount} chunks for ${player.username}, streaming will begin automatically`);
   }
 
   /**
@@ -963,72 +951,36 @@ class GameServer {
   }
 
   /**
-   * Queue message with priority handling
-   * High priority: block actions, player movement
-   * Low priority: chunk requests
+   * Handle player message with priority system
+   * High priority: block actions, player movement, chat (immediate)
+   * Low priority: chunk requests (queued via streamer)
    */
-  queuePlayerMessage(playerId, message) {
+  handlePlayerMessage(playerId, message) {
     const player = this.players.get(playerId);
     if (!player) return;
 
     // Determine message priority
-    const isHighPriority = 
-      message.type === "block_place" || 
+    const isHighPriority =
+      message.type === "block_place" ||
       message.type === "block_break" ||
       message.type === "player_move" ||
       message.type === "chat_message";
 
     if (isHighPriority) {
-      // Process high priority messages immediately, bypassing queue
-      this.processPlayerMessage(playerId, message);
+      // Process immediately
+      this.processMessage(playerId, message);
+    } else if (message.type === "chunk_request") {
+      // Queue via chunk streamer
+      this.handleChunkRequest(playerId, message);
     } else {
-      // Queue low priority messages (chunk requests)
-      if (!this.messageQueues.has(playerId)) {
-        this.messageQueues.set(playerId, {
-          lowPriority: [],
-          processing: false
-        });
-      }
-
-      const queue = this.messageQueues.get(playerId);
-      queue.lowPriority.push(message);
-
-      // Process queue if not already processing
-      if (!queue.processing) {
-        this.processMessageQueue(playerId);
-      }
+      log(`Unknown message type from ${player.username}: ${message.type}`, "WARN");
     }
   }
 
   /**
-   * Process queued messages without throttling - use chunk streamer instead
+   * Process individual message
    */
-  async processMessageQueue(playerId) {
-    const queue = this.messageQueues.get(playerId);
-    if (!queue || queue.processing) return;
-
-    queue.processing = true;
-
-    while (queue.lowPriority.length > 0) {
-      const message = queue.lowPriority.shift();
-      this.processPlayerMessage(playerId, message);
-      
-      // Yield to event loop occasionally
-      if (queue.lowPriority.length > 0 && queue.lowPriority.length % 10 === 0) {
-        await new Promise(resolve => setImmediate(resolve));
-      }
-    }
-
-    queue.processing = false;
-  }
-
-  /**
-   * Process individual player message
-   */
-  processPlayerMessage(playerId, message) {
-    const player = this.players.get(playerId);
-    if (!player) return;
-
+  processMessage(playerId, message) {
     switch (message.type) {
       case "player_move":
         this.handlePlayerMove(playerId, message);
@@ -1039,22 +991,13 @@ class GameServer {
         this.handleBlockUpdate(playerId, message);
         break;
 
-      case "chunk_request":
-        this.handleChunkRequest(playerId, message);
-        break;
-
       case "chat_message":
         this.handleChatMessage(playerId, message);
         break;
 
       default:
-        log(`Unknown message type from ${player.username}: ${message.type}`, "WARN");
+        log(`Unknown message type: ${message.type}`, "WARN");
     }
-  }
-
-  handlePlayerMessage(playerId, message) {
-    // Route through priority queue system
-    this.queuePlayerMessage(playerId, message);
   }
 
   handlePlayerMove(playerId, message) {
@@ -1278,10 +1221,9 @@ class GameServer {
     // Trigger mod system player leave event
     this.modSystem.onPlayerLeave(player);
 
-    // Clean up message queues and chunk streaming
-    this.messageQueues.delete(playerId);
+    // Clean up chunk streaming
     this.chunkStreamers.delete(playerId);
-    
+
     // Clean up authenticating flag
     this.authenticatingUsers.delete(playerId);
 
