@@ -583,14 +583,43 @@ export function PlayerController({
       lastChunkUpdate.current = now;
     }
 
-    // Send position updates every 50ms (20 updates/second) for smoother multiplayer
-    if (networkManager && now - lastNetworkUpdate.current > 50) {
-      networkManager.sendPlayerMove(
-        position.current.x,
-        position.current.y,
-        position.current.z
-      );
-      lastNetworkUpdate.current = now;
+    // Network send: throttle locally and avoid calling send when position unchanged
+    if (networkManager) {
+      const nowNet = now;
+
+      // Create a rounded position snapshot to 1cm precision
+      const snap = {
+        x: Math.round(position.current.x * 100) / 100,
+        y: Math.round(position.current.y * 100) / 100,
+        z: Math.round(position.current.z * 100) / 100,
+      };
+
+      // Compare with last sent position stored locally on this controller
+      const last = (networkManager as any).__lastClientPos || null;
+      const positionChanged = (() => {
+        if (!last) return true;
+        return (
+          Math.abs(last.x - snap.x) > 0.05 ||
+          Math.abs(last.y - snap.y) > 0.05 ||
+          Math.abs(last.z - snap.z) > 0.05
+        );
+      })();
+
+      const keepaliveExceeded = nowNet - (lastNetworkUpdate.current || 0) > 1000;
+
+      if (positionChanged || nowNet - lastNetworkUpdate.current > 50 || keepaliveExceeded) {
+        // Store last snapshot on networkManager to help coalescing
+        try {
+          (networkManager as any).__lastClientPos = snap;
+        } catch (e) {}
+
+        networkManager.sendPlayerMove(
+          position.current.x,
+          position.current.y,
+          position.current.z
+        );
+        lastNetworkUpdate.current = nowNet;
+      }
     }
   });
 

@@ -45,6 +45,9 @@ interface PlayerData {
 
 export class NetworkManager {
   private ws: WebSocket | null = null;
+  // Packet logging counters (client-side)
+  private static __clientPacketSentCount = 0;
+  private static __clientPacketReceivedCount = 0;
   private chunkDecoderWorker: Worker | null = null;
   private pendingDecodes: Map<number, (data: any) => void> = new Map();
   private nextRequestId: number = 1;
@@ -58,6 +61,13 @@ export class NetworkManager {
    */
   private currentRenderDistance: number = 4;
   private playerPosition: { x: number; y: number; z: number } | null = null;
+  // Movement send suppression state
+  private lastSentPosition: { x: number; y: number; z: number } | null = null;
+  private lastSentChecksum: string | null = null;
+  private lastSentTime: number = 0;
+  // Movement send tuning
+  private readonly MOVEMENT_POSITION_THRESHOLD = 0.05; // meters
+  private readonly MOVEMENT_KEEPALIVE_MS = 1000; // force send at least every 1s
   
   /**
    * Client-side batching configuration
@@ -268,15 +278,33 @@ export class NetworkManager {
               const buffer = event.data instanceof Blob 
                 ? await event.data.arrayBuffer() 
                 : event.data;
-              
+              // Increment and log packet received (binary)
+              try {
+                NetworkManager.__clientPacketReceivedCount++;
+                const sizeKb = (buffer.byteLength / 1024).toFixed(2);
+                console.debug(`[Packet RECV #${NetworkManager.__clientPacketReceivedCount}] type=binary size=${sizeKb}KB`);
+                logger.debug(`[Network] Packet RECV #${NetworkManager.__clientPacketReceivedCount}: type=binary size=${sizeKb}KB`);
+              } catch (e) {}
+
               logger.debug(`[Network] Received binary message: ${buffer.byteLength} bytes`);
               await this.handleBinaryMessage(buffer);
               return;
             }
 
             // Handle JSON messages
-            const message = JSON.parse(event.data);
-            this.handleMessage(message);
+            // Attempt to parse JSON and log
+            try {
+              NetworkManager.__clientPacketReceivedCount++;
+              const payloadStr = typeof event.data === 'string' ? event.data : JSON.stringify(event.data);
+              const sizeKb = (new TextEncoder().encode(payloadStr).length / 1024).toFixed(2);
+              let parsed = null;
+              try { parsed = JSON.parse(payloadStr); } catch (e) { parsed = payloadStr; }
+              console.debug(`[Packet RECV #${NetworkManager.__clientPacketReceivedCount}] type=${(parsed && parsed.type) || 'string'} size=${sizeKb}KB`, parsed);
+              logger.debug(`[Network] Packet RECV #${NetworkManager.__clientPacketReceivedCount}: type=${(parsed && parsed.type) || 'string'} size=${sizeKb}KB`);
+              this.handleMessage(parsed);
+            } catch (e) {
+              logger.error('[Network] Failed to parse incoming message', e);
+            }
           } catch (error) {
             logger.error("[Network] Error handling message:", error);
           }
@@ -631,7 +659,22 @@ export class NetworkManager {
     }
 
     try {
-      this.ws.send(JSON.stringify(message));
+      const payload = typeof message === 'string' ? message : JSON.stringify(message);
+      // Increment and log packet sent
+      NetworkManager.__clientPacketSentCount++;
+      try {
+        const sizeKb = (new TextEncoder().encode(payload).length / 1024).toFixed(2);
+        // Log to browser console for F12 and to app logger
+        // English-only comments and logs as requested
+        // Log format: [Packet SENT #<n>] <type> <sizeKB>KB
+        // Use console.debug for developer console visibility
+        console.debug(`[Packet SENT #${NetworkManager.__clientPacketSentCount}] type=${(message && message.type) || 'binary/string'} size=${sizeKb}KB`, message);
+        logger.debug(`[Network] Packet SENT #${NetworkManager.__clientPacketSentCount}: type=${(message && message.type) || 'binary/string'} size=${sizeKb}KB`);
+      } catch (e) {
+        // Ignore logging encoding errors
+      }
+
+      this.ws.send(payload);
     } catch (error) {
       logger.error("[Network] Error sending message:", error);
     }
@@ -641,12 +684,51 @@ export class NetworkManager {
    * Send player movement
    */
   sendPlayerMove(x: number, y: number, z: number) {
-    this.sendMessage({
-      type: "player_move",
-      x,
-      y,
-      z,
-    });
+    try {
+      const now = Date.now();
+
+      // Create a compact checksum for position at centi-meter precision
+      const rx = Math.round(x * 100);
+      const ry = Math.round(y * 100);
+      const rz = Math.round(z * 100);
+      const checksum = `${rx}_${ry}_${rz}`;
+
+      const positionChanged = (() => {
+        if (!this.lastSentPosition || !this.lastSentChecksum) return true;
+        // Quick checksum compare first (cheap)
+        if (this.lastSentChecksum !== checksum) return true;
+
+        // Fallback to absolute difference check
+        const dx = Math.abs(this.lastSentPosition.x - x);
+        const dy = Math.abs(this.lastSentPosition.y - y);
+        const dz = Math.abs(this.lastSentPosition.z - z);
+        return dx > this.MOVEMENT_POSITION_THRESHOLD || dy > this.MOVEMENT_POSITION_THRESHOLD || dz > this.MOVEMENT_POSITION_THRESHOLD;
+      })();
+
+      // Force send if we've held the last known position for too long
+      const forced = now - this.lastSentTime > this.MOVEMENT_KEEPALIVE_MS;
+
+      if (!positionChanged && !forced) {
+        // Suppress send to avoid spamming identical positions
+        return;
+      }
+
+      // Update send state
+      this.lastSentPosition = { x, y, z };
+      this.lastSentChecksum = checksum;
+      this.lastSentTime = now;
+
+      this.sendMessage({
+        type: "player_move",
+        x,
+        y,
+        z,
+      });
+    } catch (err) {
+      logger.error('[Network] Error in sendPlayerMove suppression logic', err);
+      // Fallback to unconditional send if something goes wrong
+      this.sendMessage({ type: "player_move", x, y, z });
+    }
   }
 
   /**

@@ -286,6 +286,12 @@ class GameServer {
     this.wss = new WebSocket.Server({ port: PORT });
     this.wss.on("error", (err) => log(`WebSocket server error: ${err.message}`, "ERROR"));
 
+    // Packet logging counters (global)
+    this._packetCounters = {
+      totalSent: 0,
+      totalReceived: 0,
+    };
+
     // HTTP server for blockpack assets (textures)
     this.httpServer = http.createServer((req, res) => {
       this.handleHttpRequest(req, res);
@@ -358,6 +364,9 @@ class GameServer {
 
   setupWebSocketServer() {
     this.wss.on("connection", (ws) => {
+      // Per-connection counters
+      ws.__sentCount = 0;
+      ws.__recvCount = 0;
       let tempConnectionId = uuidv4();
       let authenticatedUser = null;
       let authTimeout = null;
@@ -375,6 +384,15 @@ class GameServer {
       // Handle messages
       ws.on("message", async (data) => {
         try {
+          // Increment and log received packet size
+          try {
+            ws.__recvCount = (ws.__recvCount || 0) + 1;
+            this._packetCounters.totalReceived++;
+            const size = (data instanceof Buffer) ? data.length : Buffer.byteLength(String(data));
+            const sizeKb = (size / 1024).toFixed(2);
+            log(`Packet RECV #${ws.__recvCount} (conn ${tempConnectionId.substring(0,8)}) size=${sizeKb}KB`, "DEBUG");
+          } catch (e) {}
+
           let message = null;
 
           // Try to parse as JSON
@@ -402,7 +420,14 @@ class GameServer {
               // Don't initialize player yet - wait for blockpacks_loaded confirmation
             } catch (error) {
               log(`Authentication failed: ${error.message}`, "ERROR");
-              ws.send(JSON.stringify({ type: "error", message: error.message || "Authentication failed" }));
+              try {
+                const payload = JSON.stringify({ type: "error", message: error.message || "Authentication failed" });
+                ws.__sentCount = (ws.__sentCount || 0) + 1;
+                this._packetCounters.totalSent++;
+                const sizeKb = (Buffer.byteLength(payload) / 1024).toFixed(2);
+                log(`Packet SENT #${ws.__sentCount} to conn ${tempConnectionId.substring(0,8)} size=${sizeKb}KB`, "DEBUG");
+                ws.send(payload);
+              } catch (e) {}
               ws.close(1008, "Authentication failed");
             }
             return;
@@ -420,7 +445,14 @@ class GameServer {
               await this.initializeAuthenticatedPlayer(ws, authenticatedUser);
             } catch (error) {
               log(`Player initialization failed: ${error.message}`, "ERROR");
-              ws.send(JSON.stringify({ type: "error", message: "Initialization failed" }));
+              try {
+                const payload = JSON.stringify({ type: "error", message: "Initialization failed" });
+                ws.__sentCount = (ws.__sentCount || 0) + 1;
+                this._packetCounters.totalSent++;
+                const sizeKb = (Buffer.byteLength(payload) / 1024).toFixed(2);
+                log(`Packet SENT #${ws.__sentCount} to conn ${tempConnectionId.substring(0,8)} size=${sizeKb}KB`, "DEBUG");
+                ws.send(payload);
+              } catch (e) {}
             }
             return;
           }
@@ -516,11 +548,18 @@ class GameServer {
       }
 
       // Send blockpacks data to client
-      ws.send(JSON.stringify({
-        type: "blockpacks_data",
-        blockpacks: blockDefinitions,
-        httpPort: HTTP_PORT  // Send HTTP port for texture loading
-      }));
+      try {
+        const payload = JSON.stringify({
+          type: "blockpacks_data",
+          blockpacks: blockDefinitions,
+          httpPort: HTTP_PORT  // Send HTTP port for texture loading
+        });
+        ws.__sentCount = (ws.__sentCount || 0) + 1;
+        this._packetCounters.totalSent++;
+        const sizeKb = (Buffer.byteLength(payload) / 1024).toFixed(2);
+        log(`Packet SENT #${ws.__sentCount} to ${user.username} size=${sizeKb}KB (blockpacks_data)`, "DEBUG");
+        ws.send(payload);
+      } catch (e) {}
 
       log(`Sent ${blockDefinitions.length} blockpacks to ${user.username}`);
 
@@ -613,10 +652,17 @@ class GameServer {
     // Send block mapping table to client (MUST be sent before world data!)
     const { blockMapping } = require('./BlockRegistry');
     const mappingTable = blockMapping.exportMappingTable();
-    ws.send(JSON.stringify({
-      type: "block_mapping",
-      mappings: mappingTable
-    }));
+    try {
+      const payload = JSON.stringify({
+        type: "block_mapping",
+        mappings: mappingTable
+      });
+      ws.__sentCount = (ws.__sentCount || 0) + 1;
+      this._packetCounters.totalSent++;
+      const sizeKb = (Buffer.byteLength(payload) / 1024).toFixed(2);
+      log(`Packet SENT #${ws.__sentCount} to ${user.username} size=${sizeKb}KB (block_mapping)`, "DEBUG");
+      ws.send(payload);
+    } catch (e) {}
     log(`Sent block mapping table to ${user.username}: ${mappingTable.length} blocks`);
 
     // Send world assignment message
@@ -631,7 +677,13 @@ class GameServer {
       forceRenderDistance: forceRenderDistance
     });
     
-    ws.send(worldAssignMsg);
+    try {
+      ws.__sentCount = (ws.__sentCount || 0) + 1;
+      this._packetCounters.totalSent++;
+      const sizeKb = (worldAssignMsg.length / 1024).toFixed(2);
+      log(`Packet SENT #${ws.__sentCount} to ${user.username} size=${sizeKb}KB (world_assign)`, "DEBUG");
+      ws.send(worldAssignMsg);
+    } catch (e) {}
     log(`Sent world assignment to ${user.username}: spawn at (${player.x}, ${player.y}, ${player.z}), max render distance: ${maxRenderDistance}${forceRenderDistance ? ', forced to max' : ''}`);
 
 
@@ -641,14 +693,21 @@ class GameServer {
     // Send existing players to new player
     this.players.forEach((existingPlayer, id) => {
       if (id !== user.id) {
-        ws.send(JSON.stringify({
-          type: "player_joined",
-          id: id,
-          username: existingPlayer.username,
-          x: existingPlayer.x,
-          y: existingPlayer.y,
-          z: existingPlayer.z,
-        }));
+        try {
+          const payload = JSON.stringify({
+            type: "player_joined",
+            id: id,
+            username: existingPlayer.username,
+            x: existingPlayer.x,
+            y: existingPlayer.y,
+            z: existingPlayer.z,
+          });
+          ws.__sentCount = (ws.__sentCount || 0) + 1;
+          this._packetCounters.totalSent++;
+          const sizeKb = (Buffer.byteLength(payload) / 1024).toFixed(2);
+          log(`Packet SENT #${ws.__sentCount} to ${user.username} size=${sizeKb}KB (player_joined)`, "DEBUG");
+          ws.send(payload);
+        } catch (e) {}
       }
     });
 
@@ -698,8 +757,14 @@ class GameServer {
             try {
               const chunk = world.getOrGenerateChunk(cx, cy, cz);
               const buffer = ChunkProtocol.serializeChunk(chunk);
+              // Send with logging
+              try {
+                player.ws.__sentCount = (player.ws.__sentCount || 0) + 1;
+                this._packetCounters.totalSent++;
+                const sizeKb = (buffer.length / 1024).toFixed(2);
+                log(`Packet SENT #${player.ws.__sentCount} to ${player.username} size=${sizeKb}KB`, "DEBUG");
+              } catch (e) {}
               player.ws.send(buffer);
-              
               player.loadedChunks.add(chunkKey);
               sentCount++;
             } catch (error) {
@@ -854,6 +919,12 @@ class GameServer {
           }
           
           // Send immediately, WebSocket handles buffering
+          try {
+            player.ws.__sentCount = (player.ws.__sentCount || 0) + 1;
+            this._packetCounters.totalSent++;
+            const sizeKb = (buffer.length / 1024).toFixed(2);
+            log(`Packet SENT #${player.ws.__sentCount} to ${player.username} size=${sizeKb}KB`, "DEBUG");
+          } catch (e) {}
           player.ws.send(buffer);
           
           const chunkKey = `${item.cx},${item.cy},${item.cz}`;
@@ -997,6 +1068,28 @@ class GameServer {
     player.y = y;
     player.z = z;
 
+    // Track last broadcasted position to avoid sending identical updates
+    if (!player._lastBroadcastPos) {
+      player._lastBroadcastPos = { x: null, y: null, z: null, t: 0 };
+    }
+
+    const last = player._lastBroadcastPos;
+    const dx = Math.abs((last.x || 0) - x);
+    const dy = Math.abs((last.y || 0) - y);
+    const dz = Math.abs((last.z || 0) - z);
+    const POS_THRESHOLD = 0.05; // meters
+    const FORCE_BROADCAST_MS = 1000; // force at least every 1s
+    const now = Date.now();
+
+    const unchanged = dx <= POS_THRESHOLD && dy <= POS_THRESHOLD && dz <= POS_THRESHOLD;
+    const force = now - last.t > FORCE_BROADCAST_MS;
+
+    if (unchanged && !force) {
+      // Skip broadcast when player position is effectively unchanged
+      // Still update last broadcast time to avoid starvation
+      return;
+    }
+
     // Update entity position in mod system
     this.modSystem.onPlayerMove(player, { x, y, z });
 
@@ -1012,6 +1105,12 @@ class GameServer {
       id: playerId,
       x, y, z
     });
+
+    // Update last broadcast record
+    player._lastBroadcastPos.x = x;
+    player._lastBroadcastPos.y = y;
+    player._lastBroadcastPos.z = z;
+    player._lastBroadcastPos.t = now;
 
     // Check if player moved to a new chunk region
     const currentChunkX = Math.floor(x / CHUNK_SIZE);
@@ -1201,13 +1300,24 @@ class GameServer {
     if (!player || !player.ws) return;
 
     try {
+      let payload = null;
       if (typeof message === 'string') {
-        player.ws.send(message);
+        payload = message;
       } else if (Buffer.isBuffer(message) || message instanceof ArrayBuffer) {
-        player.ws.send(message);
+        payload = message;
       } else {
-        player.ws.send(JSON.stringify(message));
+        payload = JSON.stringify(message);
       }
+
+      try {
+        player.ws.__sentCount = (player.ws.__sentCount || 0) + 1;
+        this._packetCounters.totalSent++;
+        const size = (payload instanceof Buffer) ? payload.length : Buffer.byteLength(String(payload));
+        const sizeKb = (size / 1024).toFixed(2);
+        log(`Packet SENT #${player.ws.__sentCount} to ${player.username} size=${sizeKb}KB`, "DEBUG");
+      } catch (e) {}
+
+      player.ws.send(payload);
     } catch (error) {
       log(`Error sending message to player ${playerId}: ${error.message}`, "ERROR");
     }
@@ -1216,13 +1326,24 @@ class GameServer {
   broadcast(message) {
     this.players.forEach((player) => {
       try {
+        let payload = null;
         if (typeof message === 'string') {
-          player.ws.send(message);
+          payload = message;
         } else if (Buffer.isBuffer(message) || message instanceof ArrayBuffer) {
-          player.ws.send(message);
+          payload = message;
         } else {
-          player.ws.send(JSON.stringify(message));
+          payload = JSON.stringify(message);
         }
+
+        try {
+          player.ws.__sentCount = (player.ws.__sentCount || 0) + 1;
+          this._packetCounters.totalSent++;
+          const size = (payload instanceof Buffer) ? payload.length : Buffer.byteLength(String(payload));
+          const sizeKb = (size / 1024).toFixed(2);
+          log(`Packet BROADCAST SENT #${player.ws.__sentCount} to ${player.username} size=${sizeKb}KB`, "DEBUG");
+        } catch (e) {}
+
+        player.ws.send(payload);
       } catch (error) {
         log(`Error broadcasting to player ${player.id}: ${error.message}`, "ERROR");
       }
@@ -1234,13 +1355,24 @@ class GameServer {
       if (id === excludePlayerId) return;
       
       try {
+        let payload = null;
         if (typeof message === 'string') {
-          player.ws.send(message);
+          payload = message;
         } else if (Buffer.isBuffer(message) || message instanceof ArrayBuffer) {
-          player.ws.send(message);
+          payload = message;
         } else {
-          player.ws.send(JSON.stringify(message));
+          payload = JSON.stringify(message);
         }
+
+        try {
+          player.ws.__sentCount = (player.ws.__sentCount || 0) + 1;
+          this._packetCounters.totalSent++;
+          const size = (payload instanceof Buffer) ? payload.length : Buffer.byteLength(String(payload));
+          const sizeKb = (size / 1024).toFixed(2);
+          log(`Packet SENT #${player.ws.__sentCount} to ${player.username} size=${sizeKb}KB`, "DEBUG");
+        } catch (e) {}
+
+        player.ws.send(payload);
       } catch (error) {
         log(`Error broadcasting to player ${id}: ${error.message}`, "ERROR");
       }
@@ -1250,13 +1382,24 @@ class GameServer {
   broadcastToAll(message) {
     this.players.forEach((player, id) => {
       try {
+        let payload = null;
         if (typeof message === 'string') {
-          player.ws.send(message);
+          payload = message;
         } else if (Buffer.isBuffer(message) || message instanceof ArrayBuffer) {
-          player.ws.send(message);
+          payload = message;
         } else {
-          player.ws.send(JSON.stringify(message));
+          payload = JSON.stringify(message);
         }
+
+        try {
+          player.ws.__sentCount = (player.ws.__sentCount || 0) + 1;
+          this._packetCounters.totalSent++;
+          const size = (payload instanceof Buffer) ? payload.length : Buffer.byteLength(String(payload));
+          const sizeKb = (size / 1024).toFixed(2);
+          log(`Packet BROADCAST_ALL SENT #${player.ws.__sentCount} to ${player.username} size=${sizeKb}KB`, "DEBUG");
+        } catch (e) {}
+
+        player.ws.send(payload);
       } catch (error) {
         log(`Error broadcasting to player ${id}: ${error.message}`, "ERROR");
       }
