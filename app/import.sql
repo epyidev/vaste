@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS game_servers (
     owner_id INT NOT NULL,
     version VARCHAR(20) DEFAULT '1.0.0',
     tags VARCHAR(255) DEFAULT '',
+
+    license_key VARCHAR(100) DEFAULT NULL,
+    license_expires_at TIMESTAMP NULL,
+    is_license_active BOOLEAN DEFAULT FALSE,
+    
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_ping TIMESTAMP NULL,
